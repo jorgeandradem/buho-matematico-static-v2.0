@@ -72,7 +72,10 @@ onMounted(() => { setTimeout(generateExercises, 100); });
 
 const focusInput = (id) => {
     activeInputId.value = id;
-    nextTick(() => { document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+    nextTick(() => { 
+        // Eliminamos scrollIntoView agresivo para evitar saltos en el diseño fijo
+        // document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
+    });
 };
 
 const handleKeypadPress = (num) => {
@@ -123,8 +126,8 @@ const handleDelete = () => {
     <SimpleConfetti :isActive="showConfetti" />
     
     <!-- HEADER -->
-    <div v-if="!isNotebookMode" class="flex-none p-3 flex items-center justify-between z-10 bg-white/60 backdrop-blur border-b border-slate-200">
-      <div class="flex items-center gap-3">
+    <div v-if="!isNotebookMode" class="flex-none p-2 flex items-center justify-between z-10 bg-white/60 backdrop-blur border-b border-slate-200">
+      <div class="flex items-center gap-2">
         <button @click="emit('back')" class="text-slate-500 hover:text-slate-800 font-bold"><ArrowLeft :size="24" /></button>
         <h1 class="text-lg font-black text-slate-800 flex items-center gap-2">
           <span :class="`${themeClasses.btn} text-white p-1 rounded`"><component :is="icon" :size="16" /></span>
@@ -162,40 +165,40 @@ const handleDelete = () => {
         </div>
     </div>
 
-    <!-- CUERPO TABLAS RÁPIDAS -->
-    <div v-if="!isNotebookMode" class="flex-1 overflow-y-auto p-4 bg-slate-50">
-       <div class="max-w-md mx-auto grid grid-cols-1 gap-4 pb-4">
-           <div class="grid grid-cols-2 gap-3">
+    <!-- CUERPO TABLAS RÁPIDAS (AJUSTE DE MÁRGENES IZQUIERDOS) -->
+    <div v-if="!isNotebookMode" class="flex-1 overflow-hidden p-2 bg-slate-50 relative flex flex-col">
+       <div class="w-full max-w-md mx-auto h-full flex flex-col justify-center">
+           <!-- grid-rows-5 fuerza a que las 5 filas ocupen exactamente el alto disponible -->
+           <div class="grid grid-cols-2 grid-rows-5 gap-2 h-full w-full">
              <div v-for="ex in exercises" :key="ex.id" 
-                  class="bg-white p-2 rounded-xl shadow-sm border-2 transition-all flex flex-col items-center justify-center gap-1 min-h-[65px]"
-                  :class="activeInputId === ex.id ? 'border-yellow-400 ring-2 ring-yellow-100 scale-[1.02]' : 'border-white'">
+                  class="bg-white p-1 rounded-xl shadow-sm border-2 transition-all flex items-center justify-between gap-1 h-full w-full pl-6 pr-2"
+                  :class="activeInputId === ex.id ? 'border-yellow-400 ring-2 ring-yellow-100 scale-[1.02] z-10' : 'border-white'">
                
-               <div class="text-base font-black text-slate-600 font-numbers flex gap-1">
+               <div class="text-base font-black text-slate-600 font-numbers flex gap-1 whitespace-nowrap">
                  <span>{{ ex.left }}</span>
                  <span class="text-indigo-400">{{ ex.operator }}</span>
                  <span>{{ ex.right }}</span>
                  <span class="text-slate-300">=</span>
                </div>
                
-               <!-- INPUT CON VALIDACIÓN EXTERNA: CORRECCIÓN FINAL -->
-               <div class="relative flex items-center justify-center w-full px-5">
+               <!-- INPUT -->
+               <div class="relative flex items-center justify-end flex-1">
                  <div @click="focusInput(ex.id)" 
                       :id="ex.id"
-                      class="w-16 h-10 rounded-lg border-2 flex items-center justify-center text-lg font-bold cursor-pointer transition-colors"
+                      class="w-14 h-9 sm:w-16 sm:h-10 rounded-lg border-2 flex items-center justify-center text-lg font-bold cursor-pointer transition-colors"
                       :class="[
-                         userInputs[ex.id] === 'correct' ? 'bg-green-100 border-green-500 text-green-700 shadow-sm' :
-                         userInputs[ex.id] === 'error' ? 'bg-red-50 border-red-300 text-red-500' :
-                         activeInputId === ex.id ? 'bg-yellow-50 border-yellow-400 text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
+                          userInputs[ex.id] === 'correct' ? 'bg-green-100 border-green-500 text-green-700 shadow-sm' :
+                          userInputs[ex.id] === 'error' ? 'bg-red-50 border-red-300 text-red-500' :
+                          activeInputId === ex.id ? 'bg-yellow-50 border-yellow-400 text-slate-800' : 'bg-slate-50 border-slate-200 text-slate-400'
                       ]"
                  >
-                    <!-- El número NO desaparece al acertar -->
                     <span>{{ userInputs[ex.id] === 'error' ? '?' : (userInputs[ex.id] === 'correct' ? ex.result : (userInputs[ex.id] || '')) }}</span>
                  </div>
                  
-                 <!-- Palomita externa a la derecha, fuera de la celda -->
+                 <!-- Palomita superpuesta -->
                  <div v-if="userInputs[ex.id] === 'correct'" 
-                      class="absolute left-full ml-1 text-green-600 animate-fade-in-scale z-10">
-                    <Check :size="20" stroke-width="4" />
+                      class="absolute right-0 mr-[-6px] text-green-600 animate-fade-in-scale z-20 bg-white rounded-full border border-green-100 shadow-sm">
+                    <Check :size="16" stroke-width="4" />
                  </div>
                </div>
              </div>
@@ -229,13 +232,13 @@ const handleDelete = () => {
 .animate-fade-in { animation: fadeIn 0.2s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
-/* Animación optimizada para la palomita externa */
+/* Animación optimizada para la palomita */
 .animate-fade-in-scale {
   animation: fadeInScale 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
 @keyframes fadeInScale {
-  from { opacity: 0; transform: scale(0.5) translateX(-5px); }
-  to { opacity: 1; transform: scale(1) translateX(0); }
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
 }
 </style>

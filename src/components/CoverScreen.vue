@@ -1,23 +1,25 @@
 <script setup>
-import { Power, ArrowRight } from 'lucide-vue-next';
+import { ArrowRight } from 'lucide-vue-next';
 import OwlImage from './OwlImage.vue';
 import userIcon from '@/assets/icono.png'; 
+import { playOwlHoot } from '../utils/sound'; // Importación Nueva
 
 const emit = defineEmits(['start']);
 
-const reloadApp = () => {
-  // Nota: En entornos de iframe, confirm() puede estar restringido.
-  if(confirm('¿Seguro que quieres recargar?')) {
-    location.reload();
-  }
+// Función Intermedia: Suena el búho Y cambia de pantalla
+const handleStart = () => {
+    // 1. Sonar inmediatamente (El navegador lo permite porque es un clic)
+    playOwlHoot();
+    
+    // 2. Emitir el evento de navegación
+    emit('start');
 };
 </script>
 
 <template>
-  <!-- h-[100dvh] y overflow-hidden eliminan el scroll del navegador móvil -->
   <div class="h-[100dvh] w-full bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col items-center p-6 text-white relative overflow-hidden font-sans">
     
-    <!-- Header: Perfil (Absolute) -->
+    <!-- Header: Perfil -->
     <div class="absolute top-4 left-4 flex items-center gap-3 z-50">
         <div class="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white flex items-center justify-center border-2 border-indigo-200 overflow-hidden shadow-lg">
             <img :src="userIcon" alt="Usuario" class="w-full h-full object-cover" />
@@ -28,15 +30,7 @@ const reloadApp = () => {
         </div>
     </div>
     
-    <!-- Botón Salir -->
-    <button 
-        @click="reloadApp"
-        class="absolute top-4 right-4 p-2 rounded-full border-2 border-white/30 text-white hover:bg-white/10 transition-all active:scale-95 z-50"
-    >
-        <Power :size="20" />
-    </button>
-
-    <!-- Contenedor Flex para centrar verticalmente sin scroll -->
+    <!-- Contenedor Flex -->
     <div class="flex-1 flex flex-col items-center justify-center w-full max-w-sm gap-8">
       
       <!-- Tarjeta Principal -->
@@ -53,8 +47,9 @@ const reloadApp = () => {
             Tu compañero experto
           </p>
           
+          <!-- Botón con la nueva función handleStart -->
           <button
-            @click="emit('start')"
+            @click="handleStart"
             class="group w-full py-4 bg-white hover:bg-indigo-50 text-indigo-900 rounded-2xl font-black text-xl shadow-xl active:scale-95 flex items-center justify-center gap-3 transition-all"
           >
             <span>Entrar a la Escuela</span>
@@ -65,7 +60,6 @@ const reloadApp = () => {
       <!-- Pie de página -->
       <div class="text-center opacity-80">
         <p class="text-xs font-bold text-white">v1.0 Static Edition</p>
-        <!-- Ajuste de tamaño y color para que sea idéntico a la fila superior -->
         <p class="text-xs font-bold text-white">© Copyright 2026</p>
       </div>
 
