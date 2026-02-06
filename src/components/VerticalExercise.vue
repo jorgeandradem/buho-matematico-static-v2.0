@@ -1,9 +1,6 @@
 <script setup>
-import { ref, computed, nextTick, onMounted } from 'vue';
-import { 
-  ChevronLeft, Eraser, Eye, EyeOff, HelpCircle, X as CloseIcon,
-  Plus, Minus, X as MultiplyIcon 
-} from 'lucide-vue-next';
+import { ref, computed, nextTick, onMounted, watch } from 'vue';
+import { ChevronLeft, Eraser, Eye, EyeOff, HelpCircle, X as CloseIcon, Plus, Minus, X as MultiplyIcon, ChevronDown } from 'lucide-vue-next';
 import SmartGuide from './SmartGuide.vue';
 import SimpleConfetti from './SimpleConfetti.vue';
 import VirtualKeypad from './VirtualKeypad.vue';
@@ -15,24 +12,41 @@ const props = defineProps({
 
 const emit = defineEmits(['back']);
 
-// --- ESTADOS NUCLEARES ---
+// --- ESTADOS ---
 const showSolution = ref(false);
 const showConfetti = ref(false);
 const activeExerciseIndex = ref(0);
 const activeCell = ref(null); 
 const currentInputTask = ref({ expected: null, nextFn: null, id: null, exIdx: null });
+const selectedTableMode = ref('current');
 
-// Datos para la solución (El Ojo)
-const currentLeft = computed(() => currentExercise.value ? currentExercise.value.top : 0);
-const currentRight = computed(() => currentExercise.value ? currentExercise.value.bot : 0);
-const currentResult = computed(() => {
-   if (!currentExercise.value) return 0;
-   const { top, bot } = currentExercise.value;
-   if (props.operation === 'add') return top + bot;
-   if (props.operation === 'sub') return top - bot;
-   if (props.operation === 'mult') return top * bot;
-   return 0;
+// Resetear selector al abrir modal
+watch(showSolution, (newVal) => { if (newVal) selectedTableMode.value = 'current'; });
+
+// --- LÓGICA DE SOLUCIONES (CON SELECTOR DE TABLAS) ---
+const displayedSolutions = computed(() => {
+    if (selectedTableMode.value === 'current') {
+        return exercises.value.map(ex => {
+            let res = 0;
+            if (props.operation === 'add') res = ex.top + ex.bot;
+            else if (props.operation === 'sub') res = ex.top - ex.bot;
+            else res = ex.top * ex.bot;
+            return { id: ex.id, n1: ex.top, op: operatorSymbol.value, n2: ex.bot, result: res, isCurrent: true };
+        });
+    } else {
+        const tableNum = parseInt(selectedTableMode.value);
+        const list = [];
+        for (let i = 1; i <= 10; i++) {
+            let n1, op, n2, res;
+            if (props.operation === 'add') { n1 = tableNum; op = '+'; n2 = i; res = n1 + n2; }
+            else if (props.operation === 'sub') { n2 = tableNum; op = '-'; n1 = tableNum + i; res = i; }
+            else { n1 = tableNum; op = 'x'; n2 = i; res = n1 * n2; }
+            list.push({ id: `tbl-${i}`, n1, op, n2, result: res, isCurrent: false });
+        }
+        return list;
+    }
 });
+
 const operatorSymbol = computed(() => {
     if (props.operation === 'add') return '+';
     if (props.operation === 'sub') return '-';
@@ -50,20 +64,20 @@ const operationConfig = computed(() => {
 });
 
 const opSymbol = computed(() => props.operation === 'sub' ? '-' : (props.operation === 'mult' ? 'x' : '+'));
-const isMultLevel2 = computed(() => props.operation === 'mult' && props.difficulty === 2);
 
-// --- GENERADOR DE EJERCICIOS ---
+// --- GENERADOR DE EJERCICIOS (SOLO BÁSICO/NIVEL 1) ---
 const generateRandomExercise = (id) => {
   let top, bot;
   if (props.operation === 'sub') {
     top = Math.floor(Math.random() * 700) + 250; 
     let units = (top % 10);
     bot = Math.floor(Math.random() * (top - 100)) + 50;
-    bot = (Math.floor(bot / 10) * 10) + (units === 9 ? 9 : units + 1); // Préstamo forzado para práctica
+    bot = (Math.floor(bot / 10) * 10) + (units === 9 ? 9 : units + 1);
     if (bot >= top) bot = top - 15;
   } else if (props.operation === 'mult') {
-    top = props.difficulty === 2 ? Math.floor(Math.random() * 8000) + 1000 : Math.floor(Math.random() * 800) + 100;
-    bot = props.difficulty === 2 ? Math.floor(Math.random() * 89) + 10 : Math.floor(Math.random() * 8) + 2;
+    // NIVEL 1: 100-900 arriba, 2-9 abajo (1 cifra de multiplicador)
+    top = Math.floor(Math.random() * 800) + 100;
+    bot = Math.floor(Math.random() * 8) + 2;
   } else {
     top = Math.floor(Math.random() * 800) + 100; bot = Math.floor(Math.random() * 800) + 100;
   }
@@ -72,7 +86,7 @@ const generateRandomExercise = (id) => {
 
 const exercises = ref(Array.from({ length: 5 }, (_, i) => generateRandomExercise(i)));
 
-// --- MOTOR LÓGICO ---
+// --- MOTOR LÓGICO ESTÁNDAR ---
 const processStandardOperation = (ex) => {
   if (!ex) return null;
   const getDigits = (num) => num.toString().split('').reverse().map(Number);
@@ -92,19 +106,10 @@ const processStandardOperation = (ex) => {
 
     if (props.operation === 'sub') {
       if (intermediateVal < b && i < cols - 1) {
-        ovalValue = intermediateVal + 10; 
-        resDigit = ovalValue - b; 
-        nextCarry = 1; 
-        showOval = true; 
-        ovalType = carry > 0 ? 'lent_and_borrow' : 'borrow';
+        ovalValue = intermediateVal + 10; resDigit = ovalValue - b; nextCarry = 1; showOval = true; ovalType = carry > 0 ? 'lent_and_borrow' : 'borrow';
       } else {
-        resDigit = intermediateVal - b; 
-        nextCarry = 0; 
-        if (carry > 0) { 
-            showOval = true; 
-            ovalValue = intermediateVal; 
-            ovalType = 'reduced'; 
-        }
+        resDigit = intermediateVal - b; nextCarry = 0; 
+        if (carry > 0) { showOval = true; ovalValue = intermediateVal; ovalType = 'reduced'; }
       }
     } else {
       const valTotal = (props.operation === 'mult' ? t * b : t + b) + carry;
@@ -117,36 +122,9 @@ const processStandardOperation = (ex) => {
   return { ...ex, processedCols: columns, totalCols: columns.length, isMultL2: false };
 };
 
-const processMultLevel2 = (ex) => {
-    if (!ex) return null;
-    const getDigits = (num) => num.toString().split('').reverse().map(Number);
-    const topDigits = getDigits(ex.top); const botDigits = getDigits(ex.bot);
-    const row1 = []; let c1 = 0;
-    for(let i=0; i<topDigits.length || c1>0; i++) {
-        const v = ((topDigits[i] || 0) * botDigits[0]) + c1;
-        row1.push({ digit: v % 10, carry: Math.floor(v / 10), prev: c1, t: (topDigits[i] || 0), m: botDigits[0] });
-        c1 = Math.floor(v / 10);
-    }
-    const row2 = []; let c2 = 0;
-    for(let i=0; i<topDigits.length || c2>0; i++) {
-        const v = ((topDigits[i] || 0) * botDigits[1]) + c2;
-        row2.push({ digit: v % 10, carry: Math.floor(v / 10), prev: c2, t: (topDigits[i] || 0), m: botDigits[1] });
-        c2 = Math.floor(v / 10);
-    }
-    const sumRows = []; let cs = 0;
-    const maxLen = Math.max(row1.length, row2.length + 1);
-    for(let i=0; i<maxLen || cs>0; i++) {
-        const d1 = row1[i]?.digit || 0;
-        const d2 = (i > 0) ? (row2[i-1]?.digit || 0) : 0;
-        const v = d1 + d2 + cs;
-        sumRows.push({ digit: v % 10, carry: Math.floor(v / 10), prev: cs, d1, d2 });
-        cs = Math.floor(v / 10);
-    }
-    return { ...ex, isMultL2: true, row1, row2, sumRows, topDigits, botDigits, totalCols: sumRows.length };
-};
-
 const computedExercises = computed(() => {
-  return exercises.value.map(ex => isMultLevel2.value ? processMultLevel2(ex) : processStandardOperation(ex));
+  // Solo procesamos lógica estándar (eliminado cualquier rastro de MultLevel2)
+  return exercises.value.map(ex => processStandardOperation(ex));
 });
 
 const currentExercise = computed(() => {
@@ -154,96 +132,38 @@ const currentExercise = computed(() => {
   return computedExercises.value[activeExerciseIndex.value];
 });
 
-// --- INTELIGENCIA DEL BÚHO (RESTAURADA) ---
+// --- INTELIGENCIA DEL BÚHO ---
 const owlAdvice = computed(() => {
   const ex = currentExercise.value;
   if (!activeCell.value || !ex) return "¡Vamos búho!";
   if (ex.completed) return "¡Excelente trabajo!\nLo has hecho\ncomo un campeón.";
-  
-  const { type, colIdx, rowId } = activeCell.value;
-  const col = !ex.isMultL2 ? ex.processedCols[colIdx] : null;
+  const { type, colIdx } = activeCell.value;
+  const col = ex.processedCols[colIdx];
 
-  // 1. LÓGICA DE RESTA
   if (props.operation === 'sub' && col) {
-      if (type === 'carry') {
-          if (col.ovalType === 'reduced') return `Como prestaste 1,\nahora eres ${col.ovalValue}.\nPonlo en el óvalo.`;
-          if (col.ovalType === 'borrow') return `¿${col.top} menor que ${col.bot}?\n¡Pide 1 prestado!\nTe vuelves ${col.ovalValue}.`;
-          if (col.ovalType === 'lent_and_borrow') return `Prestaste 1, ahora eres ${col.intermediateVal}.\n¿${col.intermediateVal} < ${col.bot}?\n¡Pide 1 prestado para ser ${col.ovalValue}!`;
-      }
+      if (type === 'carry') return "Anota la llevada.";
       const valBase = col.showOval ? col.ovalValue : col.top;
-      return `¡Resta ahora!\n${valBase} - ${col.bot} = ${col.expectedResult}\nEscríbelo abajo.`;
+      return `¡Resta ahora!\n${valBase} - ${col.bot} = ${col.expectedResult}`;
   }
-
-  // 2. LÓGICA DE SUMA
-  if (props.operation === 'add' && col) {
-      if (type === 'carry') return "Anota el 1 de la\nllevada arriba.";
-      const total = col.top + col.bot + col.prevCarry;
-      return `Suma: ${col.top} + ${col.bot} ${col.prevCarry > 0 ? '+ 1' : ''}\n= ${total}. ¡Ponlo abajo!`;
+  if (props.operation === 'add' && col) return "Suma los números.";
+  if (props.operation === 'mult' && col) {
+      if (type === 'carry') return `Llevada de la anterior.`;
+      return `Multiplica: ${col.top} x ${col.bot} ${col.prevCarry > 0 ? `+ ${col.prevCarry}` : ''}`;
   }
-
-  // 3. LÓGICA DE MULTIPLICACIÓN (NUEVO BLOQUE BLINDADO)
-  if (props.operation === 'mult') {
-      // 3A. Multiplicación Estándar (1 cifra abajo)
-      if (!ex.isMultL2 && col) {
-          if (type === 'carry') return `Esta es la llevada de\nla multiplicación anterior.\n(${col.ovalValue}).`;
-          // En modo estándar, 'bot' contiene el multiplicador completo y 'top' la cifra superior actual
-          const total = (col.top * col.bot) + col.prevCarry;
-          return `Multiplica: ${col.top} x ${col.bot} ${col.prevCarry > 0 ? `+ ${col.prevCarry}` : ''}\n= ${total}. Pon la unidad.`;
-      }
-
-      // 3B. Multiplicación Nivel 2 (2 cifras abajo)
-      if (ex.isMultL2) {
-          // Fila 1: Multiplicando por Unidades
-          if (rowId === 'r1') {
-              const cell = ex.row1[colIdx];
-              if (!cell) return "Sigue calculando...";
-              const total = (cell.t * cell.m) + cell.prev;
-              return `Unidades: ${cell.t} x ${cell.m} ${cell.prev > 0 ? `+ ${cell.prev}` : ''}\n= ${total}. Escribe el número.`;
-          }
-          // Fila 2: Multiplicando por Decenas
-          if (rowId === 'r2') {
-              // Ajuste de índice porque row2 está desplazado visualmente por el '0'
-              const arrayIdx = colIdx - 1; 
-              const cell = ex.row2[arrayIdx];
-              if (!cell) return "Turno de las decenas.";
-              const total = (cell.t * cell.m) + cell.prev;
-              return `Decenas: ${cell.t} x ${cell.m} ${cell.prev > 0 ? `+ ${cell.prev}` : ''}\n= ${total}. Escribe el número.`;
-          }
-          // Fila Suma: Suma final
-          if (rowId === 'sum') {
-              const cell = ex.sumRows[colIdx];
-              if (!cell) return "¡Ahora suma los dos!";
-              const total = cell.d1 + cell.d2 + cell.prev;
-              return `Suma: ${cell.d1} + ${cell.d2} ${cell.prev > 0 ? '+ 1' : ''}\n= ${total}.`;
-          }
-      }
-  }
-
-  return "Toca la casilla y\nescribe el número.";
+  return "Toca la casilla y escribe.";
 });
 
-// --- INTERACCIÓN ---
 const handleKeypadPress = (num) => {
   const exIdx = activeExerciseIndex.value;
   if (!currentInputTask.value.id || !exercises.value[exIdx]) return;
   const { expected, id, nextFn } = currentInputTask.value;
-
-  if (exercises.value[exIdx].inputs[id] === 'error') {
-      exercises.value[exIdx].inputs[id] = null;
-      exercises.value[exIdx].inputs[id + '_val'] = "";
-  }
-
+  if (exercises.value[exIdx].inputs[id] === 'error') { exercises.value[exIdx].inputs[id] = null; exercises.value[exIdx].inputs[id + '_val'] = ""; }
   let cur = exercises.value[exIdx].inputs[id + '_val'] || "";
   let newVal = cur + num.toString();
-  
   if (parseInt(newVal) === expected) {
-    exercises.value[exIdx].inputs[id] = 'correct';
-    exercises.value[exIdx].inputs[id + '_val'] = "";
-    nextTick(() => { if (nextFn) nextFn(); });
+    exercises.value[exIdx].inputs[id] = 'correct'; exercises.value[exIdx].inputs[id + '_val'] = ""; nextTick(() => { if (nextFn) nextFn(); });
   } else if (newVal.length >= expected.toString().length) {
-    exercises.value[exIdx].inputs[id] = 'error';
-    exercises.value[exIdx].inputs[id + '_val'] = ""; 
-    if (navigator.vibrate) navigator.vibrate(200);
+    exercises.value[exIdx].inputs[id] = 'error'; exercises.value[exIdx].inputs[id + '_val'] = ""; if (navigator.vibrate) navigator.vibrate(200);
   } else {
     exercises.value[exIdx].inputs[id + '_val'] = newVal;
   }
@@ -254,73 +174,42 @@ const handleDelete = () => {
     if (!currentInputTask.value.id || !exercises.value[exIdx]) return;
     const { id } = currentInputTask.value;
     if (exercises.value[exIdx].inputs[id] === 'correct') return; 
-    exercises.value[exIdx].inputs[id] = null;
-    exercises.value[exIdx].inputs[id + '_val'] = "";
+    exercises.value[exIdx].inputs[id] = null; exercises.value[exIdx].inputs[id + '_val'] = "";
 };
 
 const handleFocus = (exIdx, type, colIdx, rowId, expectedVal, nextFn) => {
   activeExerciseIndex.value = exIdx;
-  const newId = rowId ? `in-${exIdx}-${rowId}-${colIdx}` : `in-${exIdx}-c${colIdx}-${type}`;
+  const newId = `in-${exIdx}-c${colIdx}-${type}`;
   currentInputTask.value = { expected: expectedVal, nextFn, id: newId, exIdx };
   activeCell.value = { exIdx, type, colIdx, rowId };
 };
 
 const autoFocus = () => {
   nextTick(() => {
-    const idx = activeExerciseIndex.value; 
-    const ex = currentExercise.value; 
+    const idx = activeExerciseIndex.value; const ex = currentExercise.value; 
     if(!ex) return;
-    if (ex.isMultL2) {
-      handleFocus(idx, 'result', 0, 'r1', ex.row1[0].digit, () => nextStepMult(idx, 0, 'r1'));
-    } else {
-      const col = ex.processedCols[0]; 
-      const type = col.showOval ? 'carry' : 'result';
-      handleFocus(idx, type, 0, null, type==='carry' ? col.ovalValue : col.expectedResult, () => nextStepStd(idx, 0, type));
-    }
+    const col = ex.processedCols[0]; const type = col.showOval ? 'carry' : 'result';
+    handleFocus(idx, type, 0, null, type==='carry' ? col.ovalValue : col.expectedResult, () => nextStepStd(idx, 0, type));
   });
 };
 
 const nextStepStd = (idx, colIdx, type) => {
-  const ex = currentExercise.value;
-  if (!ex) return;
+  const ex = currentExercise.value; if (!ex) return;
   if (type === 'carry') {
     const col = ex.processedCols[colIdx];
     handleFocus(idx, 'result', colIdx, null, col.expectedResult, () => nextStepStd(idx, colIdx, 'result'));
   } else {
     if (colIdx + 1 < ex.processedCols.length) {
-      const nextCol = ex.processedCols[colIdx+1];
-      const nextType = nextCol.showOval ? 'carry' : 'result';
+      const nextCol = ex.processedCols[colIdx+1]; const nextType = nextCol.showOval ? 'carry' : 'result';
       handleFocus(idx, nextType, colIdx+1, null, nextType === 'carry' ? nextCol.ovalValue : nextCol.expectedResult, () => nextStepStd(idx, colIdx+1, nextType));
     } else {
-      exercises.value[idx].completed = true;
-      if (idx === exercises.value.length - 1) { showConfetti.value = true; }
-      else { activeExerciseIndex.value++; nextTick(autoFocus); }
+      exercises.value[idx].completed = true; if (idx === exercises.value.length - 1) { showConfetti.value = true; } else { activeExerciseIndex.value++; nextTick(autoFocus); }
     }
   }
 };
 
-const nextStepMult = (idx, col, row) => {
-  const ex = currentExercise.value;
-  if (!ex) return;
-  if (row === 'r1') {
-    if (col + 1 < ex.row1.length) handleFocus(idx, 'result', col+1, 'r1', ex.row1[col+1].digit, () => nextStepMult(idx, col+1, 'r1'));
-    else handleFocus(idx, 'result', 1, 'r2', ex.row2[0].digit, () => nextStepMult(idx, 1, 'r2'));
-  } else if (row === 'r2') {
-    if (col < ex.row2.length) handleFocus(idx, 'result', col+1, 'r2', ex.row2[col-1].digit, () => nextStepMult(idx, col+1, 'r2'));
-    else handleFocus(idx, 'result', 0, 'sum', ex.sumRows[0].digit, () => nextStepMult(idx, 0, 'sum'));
-  } else {
-    if (col + 1 < ex.sumRows.length) handleFocus(idx, 'result', col+1, 'sum', ex.sumRows[col+1].digit, () => nextStepMult(idx, col+1, 'sum'));
-    else { exercises.value[idx].completed = true; if (idx === exercises.value.length - 1) showConfetti.value = true; else { activeExerciseIndex.value++; nextTick(autoFocus); } }
-  }
-};
-
 const fullReset = async () => {
-  showConfetti.value = false;
-  activeExerciseIndex.value = 0; 
-  exercises.value = Array.from({ length: 5 }, (_, i) => generateRandomExercise(i));
-  showSolution.value = false;
-  await nextTick();
-  autoFocus(); 
+  showConfetti.value = false; activeExerciseIndex.value = 0; exercises.value = Array.from({ length: 5 }, (_, i) => generateRandomExercise(i)); showSolution.value = false; await nextTick(); autoFocus(); 
 };
 
 onMounted(autoFocus);
@@ -330,23 +219,38 @@ onMounted(autoFocus);
   <div class="h-[100dvh] w-full bg-slate-100 flex flex-col overflow-hidden font-sans select-none">
     <SimpleConfetti :isActive="showConfetti" />
     
-    <!-- MODAL SOLUCIÓN RESTAURADO -->
+    <!-- MODAL SOLUCIÓN CON SELECTOR -->
     <div v-if="showSolution" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" @click.self="showSolution = false">
-        <div class="bg-white rounded-2xl shadow-2xl w-[90%] max-w-xs border-4 border-indigo-100 overflow-hidden">
-            <div class="bg-indigo-50 p-3 border-b border-indigo-100 flex justify-between items-center text-slate-700 font-black">
-                <div class="flex items-center gap-2"><HelpCircle :size="20" class="text-indigo-500"/> Solución</div>
+        <div class="bg-white rounded-2xl shadow-2xl w-[90%] max-w-xs border-4 border-indigo-100 overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-indigo-50 p-3 border-b border-indigo-100 flex justify-between items-center text-slate-700 font-black shrink-0">
+                <div class="flex items-center gap-2"><HelpCircle :size="20" class="text-indigo-500"/> Soluciones</div>
                 <button @click="showSolution = false" class="p-1 bg-white rounded-full text-slate-400 hover:text-red-500 transition shadow-sm"><CloseIcon :size="20" /></button>
             </div>
-            <div class="p-8 bg-white flex justify-center items-center text-3xl font-black text-slate-700 font-mono tracking-wider">
-                {{ currentLeft }} <span class="text-indigo-500 px-2">{{ operatorSymbol }}</span> {{ currentRight }} <span class="text-slate-300 px-2">=</span> <span class="text-green-600 text-4xl">{{ currentResult }}</span>
+            <div class="p-2 bg-white border-b border-slate-100 shrink-0">
+                <div class="relative">
+                    <select v-model="selectedTableMode" class="w-full p-2.5 pl-4 pr-10 bg-slate-50 border-2 border-indigo-100 text-slate-700 font-bold rounded-xl appearance-none focus:outline-none focus:border-indigo-400 transition-colors cursor-pointer">
+                        <option value="current">📝 Ver mis ejercicios actuales</option>
+                        <option disabled>──────────</option>
+                        <option v-for="n in 10" :key="n" :value="n">{{ operation === 'add' ? `➕ Tabla del ${n}` : (operation === 'sub' ? `➖ Tabla del ${n}` : `✖️ Tabla del ${n}`) }}</option>
+                    </select>
+                    <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-indigo-400"><ChevronDown :size="20" stroke-width="3" /></div>
+                </div>
             </div>
-            <div class="p-3 bg-slate-50 border-t border-slate-100 text-center">
+            <div class="overflow-y-auto p-3 bg-white scrollbar-thin">
+               <div class="grid grid-cols-1 gap-2">
+                   <div v-for="item in displayedSolutions" :key="item.id" class="flex justify-between items-center p-2 rounded-xl border shadow-sm transition-all" :class="item.isCurrent ? 'bg-slate-50 border-slate-100' : 'bg-indigo-50/50 border-indigo-100'">
+                       <span class="text-lg font-bold text-slate-600 font-mono">{{ item.n1 }} <span class="text-indigo-400 mx-1">{{ item.op }}</span> {{ item.n2 }}</span>
+                       <span class="text-xl font-black text-indigo-600">= {{ item.result }}</span>
+                   </div>
+               </div>
+            </div>
+            <div class="p-3 bg-slate-50 border-t border-slate-100 text-center shrink-0">
                 <button @click="showSolution = false" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition">¡Entendido!</button>
             </div>
         </div>
     </div>
     
-    <!-- HEADER Y GUÍA DEL BÚHO -->
+    <!-- HEADER -->
     <div class="flex-none pt-2 px-4 pb-1 z-10 bg-white/90 backdrop-blur border-b border-slate-200 flex flex-col gap-1">
         <div class="flex justify-between items-center h-10">
             <div class="flex items-center gap-3">
@@ -362,68 +266,30 @@ onMounted(autoFocus);
         <SmartGuide :currentAdvice="owlAdvice" />
     </div>
 
-    <!-- ÁREA DE TRABAJO AMPLIA (CUADERNO) -->
+    <!-- ÁREA DE TRABAJO ESTÁNDAR (NIVEL 1 - FUENTE GRANDE) -->
     <div class="flex-1 flex flex-col items-center justify-center p-0 relative bg-slate-50 overflow-hidden">
         <div v-if="currentExercise" :key="currentExercise.id" class="w-[98%] max-w-4xl flex flex-col justify-center h-full animate-fade-in">
              <div class="relative p-6 py-10 rounded-[2.5rem] border-4 w-full h-[95%] shadow-2xl bg-yellow-50 border-yellow-400 flex flex-col justify-center items-center" :class="{ 'bg-green-50 border-green-300': currentExercise.completed }">
                 <div class="absolute -top-4 -left-2 bg-white text-slate-700 font-black text-lg w-10 h-10 rounded-full flex items-center justify-center shadow-md border-2 border-slate-200">{{ activeExerciseIndex + 1 }}</div>
 
-                <!-- MODO ESTÁNDAR (Suma, Resta, Mult 1 cifra) -->
-                <div v-if="!currentExercise.isMultL2" class="flex flex-row-reverse justify-center gap-4 sm:gap-10">
+                <div class="flex flex-row-reverse justify-center gap-4 sm:gap-10">
                     <div v-for="col in currentExercise.processedCols" :key="col.colIdx" class="flex flex-col items-center">
-                        <!-- ÓVALO -->
                         <div class="h-16 flex items-end justify-center">
                             <div v-if="col.showOval" 
-                                 :class="[
-                                   'text-center font-bold transition-all outline-none flex items-center justify-center cursor-pointer w-16 h-10 rounded-lg border-2 text-2xl mb-1 shadow-inner',
-                                   currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : 
-                                   currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'error' ? 'bg-red-50 border-red-500 text-red-600 animate-shake' : 
-                                   (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === col.colIdx && activeCell?.type === 'carry') ? 'bg-white focus-neon scale-110 z-10' : 'bg-white border-slate-300'
-                                 ]"
+                                 :class="[ 'text-center font-bold transition-all outline-none flex items-center justify-center cursor-pointer w-16 h-10 rounded-lg border-2 text-2xl mb-1 shadow-inner', currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'error' ? 'bg-red-50 border-red-500 text-red-600 animate-shake' : (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === col.colIdx && activeCell?.type === 'carry') ? 'bg-white focus-neon scale-110 z-10' : 'bg-white border-slate-300' ]"
                                  @click="handleFocus(activeExerciseIndex, 'carry', col.colIdx, null, col.ovalValue, () => nextStepStd(activeExerciseIndex, col.colIdx, 'carry'))">
                                 {{ currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'correct' ? col.ovalValue : (currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry_val`] || '') }}
                             </div>
                         </div>
-                        
                         <div class="w-20 h-16 flex items-center justify-center text-6xl font-mono font-bold text-slate-700">{{ col.isExtraCol ? '' : col.top }}</div>
                         <div class="w-20 h-16 flex items-center justify-center text-6xl font-mono font-bold text-slate-700 border-b-[6px] border-slate-800 relative">
                             <span v-if="col.colIdx === currentExercise.totalCols - 1 && !col.isExtraCol" class="absolute -left-16 top-2 text-5xl text-slate-400 font-black">{{ opSymbol }}</span>
                             {{ col.isExtraCol ? '' : (props.operation === 'mult' ? (col.colIdx === 0 ? col.fullBot : '') : col.bot) }}
                         </div>
-                        
-                        <div :class="[
-                               'text-center font-bold transition-all outline-none flex items-center justify-center cursor-pointer w-20 h-24 rounded-2xl border-2 text-5xl mt-4 shadow-inner',
-                               currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : 
-                               currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'error' ? 'bg-red-50 border-red-500 text-red-600 animate-shake' : 
-                               (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === col.colIdx && activeCell?.type === 'result') ? 'bg-white focus-neon scale-110 z-10' : 'bg-white border-slate-300'
-                             ]"
+                        <div :class="[ 'text-center font-bold transition-all outline-none flex items-center justify-center cursor-pointer w-20 h-24 rounded-2xl border-2 text-5xl mt-4 shadow-inner', currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'error' ? 'bg-red-50 border-red-500 text-red-600 animate-shake' : (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === col.colIdx && activeCell?.type === 'result') ? 'bg-white focus-neon scale-110 z-10' : 'bg-white border-slate-300' ]"
                              @click="handleFocus(activeExerciseIndex, 'result', col.colIdx, null, col.expectedResult, () => nextStepStd(activeExerciseIndex, col.colIdx, 'result'))">
                             {{ currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'correct' ? col.expectedResult : (currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result_val`] || '') }}
                         </div>
-                    </div>
-                </div>
-
-                <!-- MULTIPLICACIÓN 2 CIFRAS (Blindado) -->
-                <div v-else class="flex flex-col items-center w-full scale-100">
-                    <div class="inline-flex flex-col items-end">
-                        <div class="flex flex-row-reverse gap-2 mb-1"><div v-for="i in currentExercise.totalCols" :key="'t'+i" class="w-12 text-center text-4xl font-bold text-slate-700">{{ currentExercise.topDigits[i-1] ?? '' }}</div></div>
-                        <div class="flex flex-row-reverse gap-2 border-b-4 border-slate-800 pb-1 mb-2 relative"><span class="absolute right-full mr-6 top-0 text-4xl font-black text-slate-400">x</span><div v-for="i in currentExercise.totalCols" :key="'b'+i" class="w-12 text-center text-4xl font-bold text-slate-700">{{ currentExercise.botDigits[i-1] ?? '' }}</div></div>
-                        
-                        <div class="flex flex-row-reverse gap-2 mb-1"><div v-for="i in currentExercise.totalCols" :key="'r1-'+i">
-                            <div v-if="currentExercise.row1[i-1]" :class="[ 'w-12 h-14 rounded-lg border-2 text-3xl flex items-center justify-center cursor-pointer', (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === i-1 && activeCell?.rowId === 'r1') ? 'focus-neon' : 'bg-white border-slate-300', currentExercise.inputs[`in-${activeExerciseIndex}-r1-${i-1}`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : (currentExercise.inputs[`in-${activeExerciseIndex}-r1-${i-1}`] === 'error' ? 'bg-red-50 border-red-500 animate-shake' : '') ]" @click="handleFocus(activeExerciseIndex, 'result', i-1, 'r1', currentExercise.row1[i-1].digit, () => nextStepMult(activeExerciseIndex, i-1, 'r1'))">{{ currentExercise.inputs[`in-${activeExerciseIndex}-r1-${i-1}`] === 'correct' ? currentExercise.row1[i-1].digit : (currentExercise.inputs[`in-${activeExerciseIndex}-r1-${i-1}_val`] || '') }}</div>
-                            <div v-else class="w-12"></div>
-                        </div></div>
-                        
-                        <div class="flex flex-row-reverse gap-2 mb-2"><div v-for="i in currentExercise.totalCols" :key="'r2-'+i">
-                            <div v-if="i === 1" class="w-12 h-14 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-300 font-bold bg-white text-3xl">0</div>
-                            <div v-else-if="currentExercise.row2[i-2]" :class="[ 'w-12 h-14 rounded-lg border-2 text-3xl flex items-center justify-center cursor-pointer', (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === i-1 && activeCell?.rowId === 'r2') ? 'focus-neon' : 'bg-white border-slate-300', currentExercise.inputs[`in-${activeExerciseIndex}-r2-${i-1}`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : (currentExercise.inputs[`in-${activeExerciseIndex}-r2-${i-1}`] === 'error' ? 'bg-red-50 border-red-500 animate-shake' : '') ]" @click="handleFocus(activeExerciseIndex, 'result', i-1, 'r2', currentExercise.row2[i-2].digit, () => nextStepMult(activeExerciseIndex, i-1, 'r2'))">{{ currentExercise.inputs[`in-${activeExerciseIndex}-r2-${i-1}`] === 'correct' ? currentExercise.row2[i-2].digit : (currentExercise.inputs[`in-${activeExerciseIndex}-r2-${i-1}_val`] || '') }}</div>
-                            <div v-else class="w-12"></div>
-                        </div></div>
-                        
-                        <div class="w-full border-b-4 border-slate-300 mb-2"></div>
-                        <div class="flex flex-row-reverse gap-2"><div v-for="i in currentExercise.totalCols" :key="'s'+i">
-                            <div v-if="currentExercise.sumRows[i-1]" :class="[ 'w-12 h-16 rounded-lg border-2 text-4xl flex items-center justify-center cursor-pointer', (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === i-1 && activeCell?.rowId === 'sum') ? 'focus-neon' : 'bg-white border-slate-300', currentExercise.inputs[`in-${activeExerciseIndex}-sum-${i-1}`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : (currentExercise.inputs[`in-${activeExerciseIndex}-sum-${i-1}`] === 'error' ? 'bg-red-50 border-red-500 animate-shake' : '') ]" @click="handleFocus(activeExerciseIndex, 'result', i-1, 'sum', currentExercise.sumRows[i-1].digit, () => nextStepMult(activeExerciseIndex, i-1, 'sum'))">{{ currentExercise.inputs[`in-${activeExerciseIndex}-sum-${i-1}`] === 'correct' ? currentExercise.sumRows[i-1].digit : (currentExercise.inputs[`in-${activeExerciseIndex}-sum-${i-1}_val`] || '') }}</div>
-                        </div></div>
                     </div>
                 </div>
              </div>
@@ -442,18 +308,9 @@ onMounted(autoFocus);
 @keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);} }
 .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-
-/* FOCO NEÓN AMARILLO ORO PULSANTE */
-.focus-neon {
-  border-color: #FACC15 !important;
-  border-width: 5px !important;
-  box-shadow: 0 0 25px rgba(250, 204, 21, 1), inset 0 0 10px rgba(250, 204, 21, 0.5);
-  animation: pulse-neon 0.8s infinite alternate ease-in-out;
-  z-index: 20 !important;
-}
-
-@keyframes pulse-neon {
-  from { box-shadow: 0 0 10px rgba(250, 204, 21, 0.7); transform: scale(1.05); }
-  to { box-shadow: 0 0 35px rgba(250, 204, 21, 1); transform: scale(1.1); }
-}
+.scrollbar-thin::-webkit-scrollbar { width: 6px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background-color: #e2e8f0; border-radius: 20px; }
+.focus-neon { border-color: #FACC15 !important; border-width: 5px !important; box-shadow: 0 0 25px rgba(250, 204, 21, 1), inset 0 0 10px rgba(250, 204, 21, 0.5); animation: pulse-neon 0.8s infinite alternate ease-in-out; z-index: 20 !important; }
+@keyframes pulse-neon { from { box-shadow: 0 0 10px rgba(250, 204, 21, 0.7); transform: scale(1.05); } to { box-shadow: 0 0 35px rgba(250, 204, 21, 1); transform: scale(1.1); } }
 </style>
