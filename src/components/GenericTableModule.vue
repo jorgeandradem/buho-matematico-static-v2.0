@@ -3,9 +3,9 @@ import { ref, onMounted, computed, nextTick } from 'vue';
 import { ArrowLeft, Eraser, Eye, EyeOff, HelpCircle, Check, X, BookOpen, Calculator } from 'lucide-vue-next';
 import SimpleConfetti from './SimpleConfetti.vue';
 import VerticalExercise from './VerticalExercise.vue';
-// NOTA: VerticalExerciseAdvanced se importará en la Fase 2
+// IMPORTACIÓN CORRECTA: Traemos el módulo avanzado que sí existe
+import MultiplicationAdvancedModule from './MultiplicationAdvancedModule.vue';
 import VirtualKeypad from './VirtualKeypad.vue'; 
-// ELIMINADO: import TablaSoluciones... (Usamos el modal interno restaurado)
 
 const props = defineProps({
   operation: String, title: String, colorTheme: String, icon: Object,
@@ -19,10 +19,10 @@ const showConfetti = ref(false);
 const isSuccess = ref(false);
 const refreshKey = ref(0);
 
-// --- NUEVO: ESTADO DE NAVEGACIÓN JERÁRQUICA ---
+// --- ESTADO DE NAVEGACIÓN JERÁRQUICA ---
 // null = Esperando selección (Hall)
 // 1 = Nivel Básico (VerticalExercise)
-// 2 = Nivel Experto (VerticalExerciseAdvanced - Futuro)
+// 2 = Nivel Experto (MultiplicationAdvancedModule)
 const selectedNotebookLevel = ref(null); 
 
 const themes = {
@@ -143,17 +143,14 @@ const handleDelete = () => {
   <div :class="`h-[100dvh] w-full ${themeClasses.bg} font-sans flex flex-col overflow-hidden`">
     <SimpleConfetti :isActive="showConfetti" />
     
-    <!-- HEADER (Solo visible si NO estamos en el Hall de selección) -->
     <div v-if="!isNotebookMode || selectedNotebookLevel !== null" class="flex-none p-2 flex items-center justify-between z-10 bg-white/60 backdrop-blur border-b border-slate-200">
       <div class="flex items-center gap-2">
-        <!-- El botón volver cambia su comportamiento según dónde estemos -->
         <button @click="isNotebookMode && operation === 'mult' ? resetLevelSelection() : emit('back')" class="text-slate-500 hover:text-slate-800 font-bold"><ArrowLeft :size="24" /></button>
         <h1 class="text-lg font-black text-slate-800 flex items-center gap-2">
           <span :class="`${themeClasses.btn} text-white p-1 rounded`"><component :is="icon" :size="16" /></span>
           {{ title }}
         </h1>
       </div>
-      <!-- Botones de acción (solo en modo Rápida o si ya estamos dentro de un nivel) -->
       <div class="flex gap-2" v-if="!isNotebookMode">
            <button @click="generateExercises" class="p-2 bg-white shadow-sm rounded-lg text-slate-500 active:scale-95 transition"><Eraser :size="18" /></button>
            <button @click="showTable = !showTable" :class="`p-2 rounded-lg shadow-sm transition active:scale-95 ${showTable ? 'bg-indigo-100 text-indigo-600 ring-2 ring-indigo-300' : 'bg-white text-slate-500'}`">
@@ -162,7 +159,6 @@ const handleDelete = () => {
       </div>
     </div>
 
-    <!-- MODAL TABLA AYUDA (MODO RÁPIDO) -->
     <div v-if="showTable && !isNotebookMode" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" @click.self="showTable = false">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xs border-4 border-indigo-100 overflow-hidden flex flex-col max-h-[70vh]">
             <div class="bg-indigo-50 p-3 border-b border-indigo-100 flex justify-between items-center shrink-0">
@@ -183,7 +179,6 @@ const handleDelete = () => {
         </div>
     </div>
 
-    <!-- CUERPO TABLAS RÁPIDAS (MODO ORIGINAL) -->
     <div v-if="!isNotebookMode" class="flex-1 overflow-hidden p-2 bg-slate-50 relative flex flex-col">
        <div class="w-full max-w-md mx-auto h-full flex flex-col justify-center">
            <div class="grid grid-cols-2 grid-rows-5 gap-2 h-full w-full">
@@ -206,15 +201,12 @@ const handleDelete = () => {
        </div>
     </div>
 
-    <!-- MODO CUADERNO: LÓGICA DE PUERTAS -->
     <div v-if="isNotebookMode" class="fixed inset-0 z-50 bg-slate-100 flex flex-col">
         
-        <!-- PANTALLA DE SELECCIÓN DE NIVEL (LAS DOS PUERTAS - SOLO MULTIPLICAR) -->
         <div v-if="selectedNotebookLevel === null" class="flex-1 flex flex-col items-center justify-center p-6 animate-fade-in">
             <h2 class="text-3xl font-black text-slate-800 mb-8 text-center">Selecciona tu desafío</h2>
             
             <div class="grid grid-cols-1 gap-6 w-full max-w-sm">
-                <!-- PUERTA 1: BÁSICO -->
                 <button @click="selectedNotebookLevel = 1" class="group relative bg-white p-6 rounded-3xl shadow-xl border-4 border-b-8 border-green-200 active:border-b-4 active:translate-y-1 transition-all flex flex-row items-center gap-6 hover:border-green-300">
                     <div class="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform">
                         <BookOpen :size="32" stroke-width="3" />
@@ -225,7 +217,6 @@ const handleDelete = () => {
                     </div>
                 </button>
 
-                <!-- PUERTA 2: EXPERTO (FASE 2) -->
                 <button @click="selectedNotebookLevel = 2" class="group relative bg-white p-6 rounded-3xl shadow-xl border-4 border-b-8 border-purple-200 active:border-b-4 active:translate-y-1 transition-all flex flex-row items-center gap-6 hover:border-purple-300">
                     <div class="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
                         <Calculator :size="32" stroke-width="3" />
@@ -242,7 +233,6 @@ const handleDelete = () => {
             </button>
         </div>
 
-        <!-- NIVEL 1: EL CLÁSICO (FASE 3 - LIMPIO) -->
         <VerticalExercise 
             v-if="selectedNotebookLevel === 1"
             :key="'level1-'+refreshKey" 
@@ -251,19 +241,13 @@ const handleDelete = () => {
             @back="props.operation === 'mult' ? resetLevelSelection() : emit('back')"
         />
 
-        <!-- NIVEL 2: PLACEHOLDER PARA FASE 2 -->
-        <div v-if="selectedNotebookLevel === 2" class="flex-1 flex flex-col items-center justify-center bg-purple-50">
-            <div class="text-center p-8">
-                <h2 class="text-3xl font-black text-purple-600 mb-2">🚧 En Construcción</h2>
-                <p class="text-slate-500 font-bold">El Nivel Experto llegará en la Fase 2.</p>
-                <button @click="resetLevelSelection()" class="mt-8 px-6 py-3 bg-white text-purple-600 font-bold rounded-xl shadow-md border-2 border-purple-100 hover:border-purple-300">
-                    Volver
-                </button>
-            </div>
-        </div>
+        <MultiplicationAdvancedModule
+             v-if="selectedNotebookLevel === 2"
+             @back="resetLevelSelection"
+        />
+
     </div>
 
-    <!-- TECLADO RÁPIDO (SOLO MODO RÁPIDO) -->
     <div v-if="!isNotebookMode" class="flex-none bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-20">
         <VirtualKeypad @press="handleKeypadPress" @delete="handleDelete" />
     </div>
