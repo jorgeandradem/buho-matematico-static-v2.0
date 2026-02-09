@@ -88,15 +88,11 @@ onMounted(() => {
   if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
 
   // 1. LÓGICA DE ESCALERA (RETORNO AL SALÓN)
-  // Si venimos de una materia, abrimos el modal "casi" instantáneamente (50ms)
-  // para que se sienta que seguimos en el "Salón" y no caemos al suelo.
   if (props.fromView && ['add', 'sub', 'mult', 'div'].includes(props.fromView)) {
       setTimeout(() => { openConfig(props.fromView); }, 50);
   }
 
   // 2. COREOGRAFÍA DEL BÚHO (ENTRADA)
-  // Solo saludamos con voz si venimos de la PORTADA (o carga inicial).
-  // Si venimos de una materia, el Búho aparece en silencio para no competir con el modal.
   const isComingFromCover = props.fromView === 'cover' || !props.fromView;
 
   setTimeout(() => {
@@ -106,14 +102,9 @@ onMounted(() => {
         const helloText = studentName.value ? `¡Hola ${studentName.value}!` : "¡Hola! ¿Cómo te llamas?";
         greeting.value = helloText;
         speak(helloText);
-        
-        // Se oculta a los 4 segundos solo si venimos de portada (para limpiar la vista)
         setTimeout(() => { showOwl.value = false; }, 4000);
     } else {
-        // Si venimos de retorno, mostramos un saludo genérico visual sin voz
         greeting.value = "¡Sigamos practicando!";
-        // No lo ocultamos automáticamente porque el modal lo tapa, 
-        // y al cerrar el modal es bonito ver al búho ahí.
     }
   }, 300);
 });
@@ -135,84 +126,82 @@ const currentSubjectLabel = computed(() => {
 </script>
 
 <template>
-  <div class="h-[100dvh] bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col p-4 overflow-hidden relative font-sans text-slate-900">
+  <div class="h-[100dvh] w-full bg-slate-100 flex justify-center overflow-hidden font-sans select-none text-slate-900">
     
-    <!-- MODAL CONFIGURACIÓN (EL SALÓN) -->
-    <div v-if="showConfigModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-        <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative flex flex-col gap-4 border-4 border-indigo-100 max-h-[90vh] overflow-y-auto">
-            <button @click="showConfigModal = false" class="absolute top-3 right-3 text-slate-400 hover:text-red-500"><CloseIcon /></button>
-            <div class="text-center mb-1">
-                <h3 class="text-2xl font-black text-slate-800">{{ currentSubjectLabel }}</h3>
-                <p class="text-slate-500 text-xs font-bold uppercase">Configuración</p>
-            </div>
-            
-            <div class="grid grid-cols-2 gap-3">
-                <button @click="configMode = 'quick'" :class="`p-3 rounded-xl border-2 font-bold text-sm transition-all ${configMode === 'quick' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-slate-200 text-slate-400'}`">⚡ Rápida</button>
-                <button @click="configMode = 'notebook'" :class="`p-3 rounded-xl border-2 font-bold text-sm transition-all ${configMode === 'notebook' ? 'border-yellow-500 bg-yellow-50 text-yellow-700 shadow-sm' : 'border-slate-200 text-slate-400'}`">📔 Cuaderno</button>
-            </div>
-
-            <!-- SELECTOR DE TABLAS (SOLO RÁPIDA) -->
-            <div v-if="configMode === 'quick'" class="flex flex-col gap-2 animate-fade-in mt-1 p-2 bg-slate-50 rounded-xl border border-slate-100">
-                <p class="text-slate-400 text-[10px] font-bold uppercase text-center">Selecciona la Tabla</p>
-                <button @click="configTable = 'random'" :class="`w-full py-2 rounded-lg font-bold text-xs border-2 transition-all flex items-center justify-center gap-2 ${configTable === 'random' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`">🎲 Tablas Aleatorias</button>
-                <div class="grid grid-cols-5 gap-2">
-                    <button v-for="n in 10" :key="n" @click="configTable = n" :class="`aspect-square rounded-lg font-black text-sm border-2 transition-all flex items-center justify-center ${configTable === n ? 'bg-indigo-600 border-indigo-600 text-white shadow-md scale-105' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`">{{ n }}</button>
+    <div class="w-full max-w-xl h-full flex flex-col bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl relative overflow-hidden p-4">
+    
+        <div v-if="showConfigModal" class="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative flex flex-col gap-4 border-4 border-indigo-100 max-h-[90vh] overflow-y-auto">
+                <button @click="showConfigModal = false" class="absolute top-3 right-3 text-slate-400 hover:text-red-500"><CloseIcon /></button>
+                <div class="text-center mb-1">
+                    <h3 class="text-2xl font-black text-slate-800">{{ currentSubjectLabel }}</h3>
+                    <p class="text-slate-500 text-xs font-bold uppercase">Configuración</p>
                 </div>
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <button @click="configMode = 'quick'" :class="`p-3 rounded-xl border-2 font-bold text-sm transition-all ${configMode === 'quick' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' : 'border-slate-200 text-slate-400'}`">⚡ Rápida</button>
+                    <button @click="configMode = 'notebook'" :class="`p-3 rounded-xl border-2 font-bold text-sm transition-all ${configMode === 'notebook' ? 'border-yellow-500 bg-yellow-50 text-yellow-700 shadow-sm' : 'border-slate-200 text-slate-400'}`">📔 Cuaderno</button>
+                </div>
+
+                <div v-if="configMode === 'quick'" class="flex flex-col gap-2 animate-fade-in mt-1 p-2 bg-slate-50 rounded-xl border border-slate-100">
+                    <p class="text-slate-400 text-[10px] font-bold uppercase text-center">Selecciona la Tabla</p>
+                    <button @click="configTable = 'random'" :class="`w-full py-2 rounded-lg font-bold text-xs border-2 transition-all flex items-center justify-center gap-2 ${configTable === 'random' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`">🎲 Tablas Aleatorias</button>
+                    <div class="grid grid-cols-5 gap-2">
+                        <button v-for="n in 10" :key="n" @click="configTable = n" :class="`aspect-square rounded-lg font-black text-sm border-2 transition-all flex items-center justify-center ${configTable === n ? 'bg-indigo-600 border-indigo-600 text-white shadow-md scale-105' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300'}`">{{ n }}</button>
+                    </div>
+                </div>
+
+                <button @click="startGame" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-lg shadow-lg active:scale-95 flex items-center justify-center gap-2 mt-2">
+                    <Play :size="20" fill="currentColor" /> ¡JUGAR!
+                </button>
             </div>
-
-            <button @click="startGame" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-lg shadow-lg active:scale-95 flex items-center justify-center gap-2 mt-2">
-                <Play :size="20" fill="currentColor" /> ¡JUGAR!
-            </button>
         </div>
-    </div>
 
-    <!-- Header y Zona Búho -->
-    <header class="flex justify-between items-center w-full max-w-lg mx-auto z-30 mb-2">
-         <button @click="handleExit" class="p-2 bg-white rounded-full text-indigo-600 shadow-md border-2 border-indigo-100"><LogOut :size="20" class="transform rotate-180" /></button>
-         <div class="bg-white px-4 py-1 rounded-full shadow-md"><span class="text-lg font-black text-indigo-600 tracking-wider">MATERIAS</span></div>
-         <div class="w-10"></div> 
-    </header>
+        <header class="flex justify-between items-center w-full z-30 mb-2">
+             <button @click="handleExit" class="p-2 bg-white rounded-full text-indigo-600 shadow-md border-2 border-indigo-100"><LogOut :size="20" class="transform rotate-180" /></button>
+             <div class="bg-white px-4 py-1 rounded-full shadow-md"><span class="text-lg font-black text-indigo-600 tracking-wider">MATERIAS</span></div>
+             <div class="w-10"></div> 
+        </header>
 
-    <div class="w-full max-w-lg mx-auto grid grid-cols-2 px-2 z-20 mb-2 items-end h-32">
-       <div class="flex items-center justify-center pb-2">
-           <!-- Globo de texto con transición suave -->
-           <div v-if="showOwl" class="bg-white rounded-xl p-3 shadow-lg border-2 border-indigo-200 relative animate-fade-in w-full text-center transition-all duration-500">
-              <p class="text-indigo-900 font-bold text-sm">{{ greeting }}</p>
+        <div class="w-full grid grid-cols-2 px-2 z-20 mb-2 items-end h-32">
+           <div class="flex items-center justify-center pb-2">
+               <div v-if="showOwl" class="bg-white rounded-xl p-3 shadow-lg border-2 border-indigo-200 relative animate-fade-in w-full text-center transition-all duration-500">
+                  <p class="text-indigo-900 font-bold text-sm">{{ greeting }}</p>
+               </div>
            </div>
-       </div>
-       <div class="flex flex-col items-center justify-end">
-           <!-- Imagen del Búho -->
-           <div v-if="showOwl" class="w-20 h-20 mb-1 transition-all duration-500"><OwlImage customClass="w-full h-full object-contain" /></div>
-           
-           <div class="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-2 border border-white/30 shadow-sm w-full">
-              <User :size="14" class="text-white" />
-              <input v-if="isEditingName" type="text" v-model="studentName" @keyup.enter="saveName" class="bg-transparent text-white font-bold text-xs outline-none w-full" autoFocus />
-              <span v-else class="text-white font-bold text-xs truncate w-full cursor-pointer" @click="isEditingName = true">{{ studentName || "Tu Nombre" }}</span>
-              <button v-if="isEditingName" @click="saveName"><Check :size="14" class="text-green-300" /></button>
-              <Pencil v-else :size="12" class="text-indigo-200" />
+           <div class="flex flex-col items-center justify-end">
+               <div v-if="showOwl" class="w-20 h-20 mb-1 transition-all duration-500"><OwlImage customClass="w-full h-full object-contain" /></div>
+               
+               <div class="bg-white/20 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-2 border border-white/30 shadow-sm w-full">
+                  <User :size="14" class="text-white" />
+                  <input v-if="isEditingName" type="text" v-model="studentName" @keyup.enter="saveName" class="bg-transparent text-white font-bold text-xs outline-none w-full" autoFocus />
+                  <span v-else class="text-white font-bold text-xs truncate w-full cursor-pointer" @click="isEditingName = true">{{ studentName || "Tu Nombre" }}</span>
+                  <button v-if="isEditingName" @click="saveName"><Check :size="14" class="text-green-300" /></button>
+                  <Pencil v-else :size="12" class="text-indigo-200" />
+               </div>
            </div>
-       </div>
-    </div>
-
-    <div class="grid grid-cols-2 gap-6 w-full max-w-lg mx-auto flex-1 content-start py-6 z-10 px-2">
-      <button v-for="opt in options" :key="opt.id" @click="openConfig(opt.id)"
-        class="group bg-white p-4 rounded-3xl border-4 border-white hover:border-indigo-200 shadow-xl active:scale-95 flex flex-col items-center justify-center gap-2 h-full min-h-[130px] transition-all">
-        <div :class="`w-14 h-14 rounded-full ${opt.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`">
-          <component :is="opt.icon" :size="28" class="text-white" :stroke-width="3" />
         </div>
-        <div class="text-center">
-          <h3 class="text-xl font-black text-slate-800 leading-none">{{ opt.label }}</h3>
-          <p class="text-slate-500 font-bold text-[10px] mt-1 tracking-wide uppercase">{{ opt.desc }}</p>
-        </div>
-      </button>
-    </div>
 
-    <!-- MENSAJE CONSEJO: MARGEN AUMENTADO (mb-8) -->
-    <div class="bg-indigo-50/90 rounded-2xl border-2 border-indigo-100 p-3 flex items-center justify-center gap-3 shadow-sm w-full max-w-lg mx-auto mt-4 mb-8 animate-fade-in">
-      <BookOpen class="text-indigo-600 shrink-0" :size="20" />
-      <p class="text-slate-800 text-xs sm:text-sm font-black italic text-center">
-        {{ randomIncentive }}
-      </p>
+        <div class="grid grid-cols-2 gap-6 w-full flex-1 content-start py-6 z-10 px-2">
+          <button v-for="opt in options" :key="opt.id" @click="openConfig(opt.id)"
+            class="group bg-white p-4 rounded-3xl border-4 border-white hover:border-indigo-200 shadow-xl active:scale-95 flex flex-col items-center justify-center gap-2 h-full min-h-[130px] transition-all">
+            <div :class="`w-14 h-14 rounded-full ${opt.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`">
+              <component :is="opt.icon" :size="28" class="text-white" :stroke-width="3" />
+            </div>
+            <div class="text-center">
+              <h3 class="text-xl font-black text-slate-800 leading-none">{{ opt.label }}</h3>
+              <p class="text-slate-500 font-bold text-[10px] mt-1 tracking-wide uppercase">{{ opt.desc }}</p>
+            </div>
+          </button>
+        </div>
+
+        <div class="bg-indigo-50/90 rounded-2xl border-2 border-indigo-100 p-3 flex items-center justify-center gap-3 shadow-sm w-full mt-4 mb-4 animate-fade-in">
+          <BookOpen class="text-indigo-600 shrink-0" :size="20" />
+          <p class="text-slate-800 text-xs sm:text-sm font-black italic text-center">
+            {{ randomIncentive }}
+          </p>
+        </div>
+
     </div>
   </div>
 </template>

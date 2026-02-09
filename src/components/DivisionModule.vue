@@ -410,169 +410,160 @@ const isFinalRemainder = (row, col) => {
 </script>
 
 <template>
-  <div class="h-[100dvh] w-full bg-blue-600 font-sans flex flex-col overflow-hidden">
+  <div class="h-[100dvh] w-full bg-blue-600 font-sans flex justify-center overflow-hidden">
+    
     <SimpleConfetti :isActive="showConfetti" />
     
-    <!-- HEADER -->
-    <div class="flex-none pt-2 px-4 pb-2 z-10">
-        <div class="max-w-4xl mx-auto w-full flex flex-col md:flex-row justify-between items-center gap-2 text-white">
-            <div class="flex items-center justify-between w-full">
-                <button @click="emit('back')" class="text-blue-100 hover:text-white transition-colors flex items-center gap-2 font-bold">
-                    <ArrowLeft :size="24" /> Volver
-                </button>
-                <h1 class="text-xl font-extrabold flex items-center gap-2">
-                    <span class="bg-blue-500 text-white p-1 rounded-lg border border-blue-400">
-                        <Divide :size="20" />
-                    </span>
-                    División
-                </h1>
-                 <button @click="generateNewProblem" class="p-1.5 rounded-lg text-white font-bold shadow-md active:scale-95 transition-all bg-yellow-500 hover:bg-yellow-400">
-                    <RefreshCw :size="18" />
-                </button>
-            </div>
-            
-            <div class="flex flex-row gap-2 items-center w-full justify-center">
-                 <div class="flex bg-blue-700/50 p-1 rounded-lg backdrop-blur-sm border border-blue-500/50">
-                    <button @click="difficulty = 1" :class="`px-3 py-1 rounded font-bold text-sm transition-colors ${difficulty===1 ? 'bg-white text-blue-700 shadow-sm' : 'text-blue-100 hover:bg-white/10'}`">Nivel 1</button>
-                    <button @click="difficulty = 2" :class="`px-3 py-1 rounded font-bold text-sm transition-colors ${difficulty===2 ? 'bg-white text-blue-700 shadow-sm' : 'text-blue-100 hover:bg-white/10'}`">Nivel 2</button>
-                 </div>
-                 <div class="flex flex-row gap-2 items-center bg-blue-700/50 p-1.5 rounded-xl shadow-sm border border-blue-500/50">
-                    <div class="flex items-center gap-1 px-2">
-                        <span class="text-xs text-blue-200 font-bold">Tabla:</span>
-                        <select v-model="forcedDivisor" class="font-black text-base text-white bg-transparent outline-none cursor-pointer">
-                            <option value="random" class="text-slate-900">Aleatoria</option>
-                            <option v-for="n in 10" :key="n" :value="n" class="text-slate-900">{{ n }}</option>
-                        </select>
-                    </div>
-                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- HINT BAR -->
-    <div class="flex-none px-4 z-10">
-        <div :class="`max-w-3xl mx-auto w-full p-2 sm:p-3 rounded-xl shadow-lg border-l-8 transition-all duration-500 flex gap-4 items-center bg-white ${currentHint.theme.border}`">
-            <div :class="`p-1 rounded-full bg-slate-50 border-2 ${currentHint.theme.border} w-12 h-12 flex items-center justify-center shrink-0`">
-                <OwlImage :customClass="`w-full h-full object-contain ${isSuccess ? 'animate-bounce' : ''}`" />
-            </div>
-            <div>
-                <h3 :class="`font-black text-[10px] uppercase tracking-widest mb-0.5 ${currentHint.theme.text}`">
-                    {{ isSuccess ? '¡Completado!' : (!isSelectionComplete ? 'Paso 1: Selección' : 'Profesor Búho Dice:') }}
-                </h3>
-                <p class="text-sm sm:text-base font-bold text-slate-700 leading-tight">
-                    {{ currentHint.message }}
-                </p>
-            </div>
-        </div>
-    </div>
-
-    <!-- ÁREA DE TRABAJO (Compactada) -->
-    <div class="flex-1 w-full overflow-hidden relative bg-slate-50">
-        <div class="w-full h-full overflow-auto p-4 flex flex-col items-center justify-start">
-            
-            <!-- TARJETA AMARILLA COMPACTA: pt-6, w-[98%] -->
-            <div class="bg-[#fff9c4] border-4 border-[#fbc02d] rounded-2xl shadow-2xl p-2 w-[98%] max-w-2xl relative mt-4 mb-4 pt-8"
-                 style="background-image: linear-gradient(#e1f5fe 1px, transparent 1px); background-size: 100% 2em;">
+    <div class="w-full max-w-xl h-full flex flex-col bg-blue-600 shadow-2xl relative">
+        
+        <div class="flex-none pt-2 px-4 pb-2 z-10">
+            <div class="w-full flex flex-col md:flex-row justify-between items-center gap-2 text-white">
+                <div class="flex items-center justify-between w-full">
+                    <button @click="emit('back')" class="text-blue-100 hover:text-white transition-colors flex items-center gap-2 font-bold">
+                        <ArrowLeft :size="24" /> Volver
+                    </button>
+                    <h1 class="text-xl font-extrabold flex items-center gap-2">
+                        <span class="bg-blue-500 text-white p-1 rounded-lg border border-blue-400">
+                            <Divide :size="20" />
+                        </span>
+                        División
+                    </h1>
+                     <button @click="generateNewProblem" class="p-1.5 rounded-lg text-white font-bold shadow-md active:scale-95 transition-all bg-yellow-500 hover:bg-yellow-400">
+                        <RefreshCw :size="18" />
+                    </button>
+                </div>
                 
-                <div class="absolute top-0 bottom-0 left-6 w-1 bg-red-300 opacity-50"></div>
-                
-                <div class="flex items-start gap-4 pl-2 relative z-10">
-                    
-                    <!-- COLUMNA IZQUIERDA -->
-                    <div class="flex flex-col relative">
-                          <!-- Bajado a -top-4 -->
-                          <div class="absolute -top-4 w-full text-center pl-1 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-                              Dividendo
-                          </div>
-
-                          <!-- DIVIDENDO -->
-                          <div class="flex relative justify-center">
-                              <!-- Fuente reducida a text-2xl -->
-                              <div v-for="(digit, idx) in dividend.toString()" :key="`d-${idx}`" 
-                                @click="handleDigitClick(idx)"
-                                :class="`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-2xl font-black font-mono border-b-2 transition-all cursor-pointer select-none rounded-md mx-0.5
-                                    ${selectedIndices.includes(idx) ? 'bg-green-200 text-green-900 border-green-500 shadow-sm' : 'border-transparent text-slate-700 hover:bg-white/50'}
-                                    ${((!isSelectionComplete && idx === selectedIndices.length) || (waitingForDropIndex === idx)) ? 'animate-bounce bg-green-100 ring-2 ring-green-400 z-50' : ''}
-                                `"
-                              >
-                                 {{ digit }}
-                                 <div v-if="waitingForDropIndex === idx || (!isSelectionComplete && idx === selectedIndices.length)" 
-                                      class="absolute -top-8 text-green-600 animate-bounce left-1/2 -translate-x-1/2 bg-white/80 rounded-full p-1 shadow-sm">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
-                                </div>
-                              </div>
-                          </div>
-
-                          <!-- GRID RESTAS -->
-                          <div class="grid mt-1" :style="{ gridTemplateColumns: `repeat(${dividend.toString().length}, min-content)` }">
-                              <template v-for="r in ((solutionSteps.length * 2) + 2)" :key="`row-${r}`">
-                                  <!-- Altura reducida a h-8 y h-10 -->
-                                  <div v-for="(d, c) in dividend.toString()" :key="`cell-${r}-${c}`" class="w-8 h-8 sm:w-10 sm:h-10 p-0.5 relative flex items-center justify-center mx-0.5">
-                                      <input 
-                                          v-if="orderedKeys.includes(`grid-${r}-${c}`)"
-                                          :ref="(el) => setRef(`grid-${r}-${c}`, el)"
-                                          type="tel"
-                                          autocomplete="off"
-                                          :name="`div_g_${uid}_${r}_${c}`"
-                                          data-lpignore="true"
-                                          readonly inputmode="none"
-                                          :value="userInputs[`grid-${r}-${c}`]"
-                                          :disabled="activeKey !== `grid-${r}-${c}` && !isSuccess" 
-                                          :class="getCellClass(`grid-${r}-${c}`)"
-                                          @click="activeKey.value = `grid-${r}-${c}`"
-                                      />
-                                      
-                                      <div v-if="solutionSteps.some(s => s.type === 'product' && s.row === r && c >= s.colEnd - s.value.toString().length + 1 && c <= s.colEnd)" 
-                                            class="absolute bottom-0 left-0 right-0 border-b-2 border-slate-800 pointer-events-none">
-                                      </div>
-                                      <span v-if="solutionSteps.some(s => s.type === 'product' && s.row === r && s.colEnd - s.value.toString().length === c - 1)"
-                                            class="absolute -left-3 top-1 text-slate-500 font-bold pointer-events-none text-sm">-</span>
-                                      <span v-if="isFinalRemainder(r, c)" class="absolute left-full ml-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 tracking-widest px-1 whitespace-nowrap uppercase">Residuo</span>
-                                  </div>
-                              </template>
-                          </div>
-                    </div>
-
-                    <!-- COLUMNA DERECHA -->
-                    <div class="flex flex-col relative">
-                        <div class="absolute -top-4 w-full text-center text-[10px] sm:text-xs font-bold text-slate-400 tracking-widest uppercase">
-                            Divisor
+                <div class="flex flex-row gap-2 items-center w-full justify-center">
+                     <div class="flex bg-blue-700/50 p-1 rounded-lg backdrop-blur-sm border border-blue-500/50">
+                        <button @click="difficulty = 1" :class="`px-3 py-1 rounded font-bold text-sm transition-colors ${difficulty===1 ? 'bg-white text-blue-700 shadow-sm' : 'text-blue-100 hover:bg-white/10'}`">Nivel 1</button>
+                        <button @click="difficulty = 2" :class="`px-3 py-1 rounded font-bold text-sm transition-colors ${difficulty===2 ? 'bg-white text-blue-700 shadow-sm' : 'text-blue-100 hover:bg-white/10'}`">Nivel 2</button>
+                     </div>
+                     <div class="flex flex-row gap-2 items-center bg-blue-700/50 p-1.5 rounded-xl shadow-sm border border-blue-500/50">
+                        <div class="flex items-center gap-1 px-2">
+                            <span class="text-xs text-blue-200 font-bold">Tabla:</span>
+                            <select v-model="forcedDivisor" class="font-black text-base text-white bg-transparent outline-none cursor-pointer">
+                                <option value="random" class="text-slate-900">Aleatoria</option>
+                                <option v-for="n in 10" :key="n" :value="n" class="text-slate-900">{{ n }}</option>
+                            </select>
                         </div>
-
-                        <!-- Altura reducida h-10, texto text-2xl -->
-                        <div class="border-b-2 border-l-2 border-slate-800 px-3 py-1 h-10 flex items-center justify-center min-w-[60px] bg-white/50">
-                            <span class="text-2xl font-black text-slate-800">{{ divisor }}</span>
-                        </div>
-                        
-                        <div class="flex gap-1 justify-start flex-wrap max-w-[150px] mt-2">
-                            <div v-for="(digit, idx) in dividend.toString()" :key="`q-${idx}`">
-                                 <input 
-                                     v-if="solutionSteps.some(s => s.type === 'quotient' && s.index === idx)"
-                                     :ref="(el) => setRef(`q-${idx}`, el)"
-                                     type="tel"
-                                     autocomplete="off"
-                                     readonly inputmode="none"
-                                     :value="userInputs[`q-${idx}`]"
-                                     :disabled="activeKey !== `q-${idx}` && !isSuccess"
-                                     :class="getCellClass(`q-${idx}`)"
-                                 />
-                            </div>
-                        </div>
-                        <div class="text-center w-full mt-1 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-                            Cociente
-                        </div>
-                    </div>
-
+                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- 3. TECLADO VIRTUAL -->
-    <div class="flex-none bg-white z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-        <VirtualKeypad @press="handleKeypadPress" @delete="handleDelete" />
-    </div>
+        <div class="flex-none px-4 z-10">
+            <div :class="`w-full p-2 sm:p-3 rounded-xl shadow-lg border-l-8 transition-all duration-500 flex gap-4 items-center bg-white ${currentHint.theme.border}`">
+                <div :class="`p-1 rounded-full bg-slate-50 border-2 ${currentHint.theme.border} w-12 h-12 flex items-center justify-center shrink-0`">
+                    <OwlImage :customClass="`w-full h-full object-contain ${isSuccess ? 'animate-bounce' : ''}`" />
+                </div>
+                <div>
+                    <h3 :class="`font-black text-[10px] uppercase tracking-widest mb-0.5 ${currentHint.theme.text}`">
+                        {{ isSuccess ? '¡Completado!' : (!isSelectionComplete ? 'Paso 1: Selección' : 'Profesor Búho Dice:') }}
+                    </h3>
+                    <p class="text-sm sm:text-base font-bold text-slate-700 leading-tight">
+                        {{ currentHint.message }}
+                    </p>
+                </div>
+            </div>
+        </div>
 
+        <div class="flex-1 w-full overflow-hidden relative bg-slate-50 rounded-t-[2rem] mt-2 shadow-inner">
+            <div class="w-full h-full overflow-auto p-4 flex flex-col items-center justify-start">
+                
+                <div class="bg-[#fff9c4] border-4 border-[#fbc02d] rounded-2xl shadow-2xl p-2 w-[98%] max-w-lg relative mt-4 mb-4 pt-8"
+                     style="background-image: linear-gradient(#e1f5fe 1px, transparent 1px); background-size: 100% 2em;">
+                    
+                    <div class="absolute top-0 bottom-0 left-6 w-1 bg-red-300 opacity-50"></div>
+                    
+                    <div class="flex items-start gap-4 pl-2 relative z-10 justify-center">
+                        
+                        <div class="flex flex-col relative">
+                              <div class="absolute -top-4 w-full text-center pl-1 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                                  Dividendo
+                              </div>
+
+                              <div class="flex relative justify-center">
+                                  <div v-for="(digit, idx) in dividend.toString()" :key="`d-${idx}`" 
+                                    @click="handleDigitClick(idx)"
+                                    :class="`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-2xl font-black font-mono border-b-2 transition-all cursor-pointer select-none rounded-md mx-0.5
+                                        ${selectedIndices.includes(idx) ? 'bg-green-200 text-green-900 border-green-500 shadow-sm' : 'border-transparent text-slate-700 hover:bg-white/50'}
+                                        ${((!isSelectionComplete && idx === selectedIndices.length) || (waitingForDropIndex === idx)) ? 'animate-bounce bg-green-100 ring-2 ring-green-400 z-50' : ''}
+                                    `"
+                                  >
+                                      {{ digit }}
+                                      <div v-if="waitingForDropIndex === idx || (!isSelectionComplete && idx === selectedIndices.length)" 
+                                            class="absolute -top-8 text-green-600 animate-bounce left-1/2 -translate-x-1/2 bg-white/80 rounded-full p-1 shadow-sm">
+                                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+                                      </div>
+                                  </div>
+                              </div>
+
+                              <div class="grid mt-1" :style="{ gridTemplateColumns: `repeat(${dividend.toString().length}, min-content)` }">
+                                  <template v-for="r in ((solutionSteps.length * 2) + 2)" :key="`row-${r}`">
+                                      <div v-for="(d, c) in dividend.toString()" :key="`cell-${r}-${c}`" class="w-8 h-8 sm:w-10 sm:h-10 p-0.5 relative flex items-center justify-center mx-0.5">
+                                          <input 
+                                              v-if="orderedKeys.includes(`grid-${r}-${c}`)"
+                                              :ref="(el) => setRef(`grid-${r}-${c}`, el)"
+                                              type="tel"
+                                              autocomplete="off"
+                                              :name="`div_g_${uid}_${r}_${c}`"
+                                              data-lpignore="true"
+                                              readonly inputmode="none"
+                                              :value="userInputs[`grid-${r}-${c}`]"
+                                              :disabled="activeKey !== `grid-${r}-${c}` && !isSuccess" 
+                                              :class="getCellClass(`grid-${r}-${c}`)"
+                                              @click="activeKey.value = `grid-${r}-${c}`"
+                                          />
+                                          
+                                          <div v-if="solutionSteps.some(s => s.type === 'product' && s.row === r && c >= s.colEnd - s.value.toString().length + 1 && c <= s.colEnd)" 
+                                                class="absolute bottom-0 left-0 right-0 border-b-2 border-slate-800 pointer-events-none">
+                                          </div>
+                                          <span v-if="solutionSteps.some(s => s.type === 'product' && s.row === r && s.colEnd - s.value.toString().length === c - 1)"
+                                                class="absolute -left-3 top-1 text-slate-500 font-bold pointer-events-none text-sm">-</span>
+                                          <span v-if="isFinalRemainder(r, c)" class="absolute left-full ml-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 tracking-widest px-1 whitespace-nowrap uppercase">Residuo</span>
+                                      </div>
+                                  </template>
+                              </div>
+                        </div>
+
+                        <div class="flex flex-col relative">
+                            <div class="absolute -top-4 w-full text-center text-[10px] sm:text-xs font-bold text-slate-400 tracking-widest uppercase">
+                                Divisor
+                            </div>
+
+                            <div class="border-b-2 border-l-2 border-slate-800 px-3 py-1 h-10 flex items-center justify-center min-w-[60px] bg-white/50">
+                                <span class="text-2xl font-black text-slate-800">{{ divisor }}</span>
+                            </div>
+                            
+                            <div class="flex gap-1 justify-start flex-wrap max-w-[150px] mt-2">
+                                <div v-for="(digit, idx) in dividend.toString()" :key="`q-${idx}`">
+                                      <input 
+                                          v-if="solutionSteps.some(s => s.type === 'quotient' && s.index === idx)"
+                                          :ref="(el) => setRef(`q-${idx}`, el)"
+                                          type="tel"
+                                          autocomplete="off"
+                                          readonly inputmode="none"
+                                          :value="userInputs[`q-${idx}`]"
+                                          :disabled="activeKey !== `q-${idx}` && !isSuccess"
+                                          :class="getCellClass(`q-${idx}`)"
+                                      />
+                                </div>
+                            </div>
+                            <div class="text-center w-full mt-1 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                                Cociente
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-none bg-white z-20 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+            <VirtualKeypad @press="handleKeypadPress" @delete="handleDelete" />
+        </div>
+
+    </div>
   </div>
 </template>
 
