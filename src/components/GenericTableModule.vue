@@ -2,12 +2,16 @@
 import { ref, onMounted, computed, nextTick } from 'vue';
 import { 
   ArrowLeft, Eraser, Eye, EyeOff, HelpCircle, Check, X, 
-  BookOpen, Calculator, ChevronLeft // Agregado ChevronLeft para el botón Volver
+  BookOpen, Calculator, ChevronLeft 
 } from 'lucide-vue-next';
-import SimpleConfetti from './SimpleConfetti.vue';
+// CAMBIO 1: Quitamos SimpleConfetti y ponemos CoinRain
+import CoinRain from './CoinRain.vue';
 import VerticalExercise from './VerticalExercise.vue';
 import MultiplicationAdvancedModule from './MultiplicationAdvancedModule.vue';
 import VirtualKeypad from './VirtualKeypad.vue'; 
+// CAMBIO 2: Importamos Banco y Voz
+import { useGamificationStore } from '../stores/useGamificationStore';
+import { speak } from '../utils/voice';
 
 const props = defineProps({
   operation: String, title: String, colorTheme: String, icon: Object,
@@ -15,9 +19,12 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['back']);
+const gamificationStore = useGamificationStore(); // Conexión al banco
+
 const isNotebookMode = ref(props.initialMode === 'notebook'); 
 const selectedNumber = ref(props.initialTable || 'random');
-const showConfetti = ref(false);
+// CAMBIO 3: Variable para la lluvia de monedas
+const showCoinRain = ref(false);
 const isSuccess = ref(false);
 const refreshKey = ref(0);
 
@@ -42,6 +49,8 @@ const initModule = async () => {
       }
   } else {
       generateExercises();
+      // Voz de bienvenida al modo rápido
+      speak("¡Modo rápido! Responde lo más veloz que puedas.");
   }
 };
 
@@ -57,7 +66,7 @@ const activeInputId = ref(null);
 
 const generateExercises = async () => {
   isSuccess.value = false;
-  showConfetti.value = false;
+  showCoinRain.value = false; // Reset lluvia
   userInputs.value = {};
   activeInputId.value = null;
   exercises.value = [];
@@ -105,11 +114,27 @@ const handleKeypadPress = (num) => {
     if (currentVal === 'error') currentVal = '';
     const newVal = currentVal + num.toString();
     if (newVal.length > ex.result.toString().length + 1) return;
+    
     if (parseInt(newVal) === ex.result) {
+        // --- RESPUESTA CORRECTA ---
         userInputs.value[id] = 'correct'; 
+        
+        // CAMBIO 4: Pago inmediato de 1 moneda de Cobre
+        gamificationStore.addCoins('copper', 1);
+
         const idx = exercises.value.findIndex(e => e.id === id);
-        if (idx < exercises.value.length - 1) { focusInput(exercises.value[idx + 1].id); } 
-        else { activeInputId.value = null; isSuccess.value = true; showConfetti.value = true; }
+        if (idx < exercises.value.length - 1) { 
+            focusInput(exercises.value[idx + 1].id); 
+        } else { 
+            // --- JUEGO TERMINADO ---
+            activeInputId.value = null; 
+            isSuccess.value = true; 
+            showCoinRain.value = true; // Activa la lluvia de cobre
+            
+            // Bono final de 5 cobres
+            gamificationStore.addCoins('copper', 5);
+            speak("¡Fantástico! Has completado la tabla rápida y ganado muchas monedas de cobre.");
+        }
     } else {
         const strResult = ex.result.toString();
         if (newVal.length >= strResult.length && newVal !== strResult) { userInputs.value[id] = 'error'; if (navigator.vibrate) navigator.vibrate(200); } 
@@ -130,7 +155,9 @@ const handleDelete = () => {
 <template>
   <div class="h-[100dvh] w-full bg-slate-100 flex justify-center overflow-hidden font-sans select-none">
     
-    <SimpleConfetti :isActive="showConfetti" />
+    <div v-if="showCoinRain">
+        <CoinRain type="copper" :count="40" />
+    </div>
     
     <div v-if="!isNotebookMode" :class="`w-full max-w-xl h-full flex flex-col shadow-2xl relative bg-white ${themeClasses.bg}`">
         
@@ -261,6 +288,7 @@ const handleDelete = () => {
             :key="'level1-'+refreshKey" 
             :operation="props.operation" 
             :difficulty="1"
+            :initialTable="props.initialTable" 
             @back="props.operation === 'mult' ? resetLevelSelection() : emit('back')"
         />
 

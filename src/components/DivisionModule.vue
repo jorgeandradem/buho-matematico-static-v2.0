@@ -1,27 +1,39 @@
 <script setup>
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { 
-  ArrowLeft, RefreshCw, Trophy, Eraser, Sparkles, Divide, X as CloseIcon, HelpCircle 
+  ArrowLeft, RefreshCw, Trophy, Eraser, Sparkles, Divide, X as CloseIcon, HelpCircle, Check 
 } from 'lucide-vue-next';
-import SimpleConfetti from './SimpleConfetti.vue';
+import CoinRain from './CoinRain.vue';
 import OwlImage from './OwlImage.vue';
 import VirtualKeypad from './VirtualKeypad.vue';
+import { useGamificationStore } from '../stores/useGamificationStore';
+import { speak } from '../utils/voice';
 
 const emit = defineEmits(['back']);
+const gamificationStore = useGamificationStore(); 
 
 // --- ESTADO ---
 const dividend = ref(0);
 const divisor = ref(0);
 const userInputs = ref({});
 const solutionSteps = ref([]);
-const difficulty = ref(1);
+const difficulty = ref(1); // 1 = Nivel Básico, 2 = Nivel Avanzado
 const forcedDivisor = ref('random');
 const selectedIndices = ref([]);
 const isSelectionComplete = ref(false); 
-const showConfetti = ref(false);
+const showCoinRain = ref(false); 
 const isSuccess = ref(false);
-const showTableModal = ref(false); // Controla el modal de ayuda
+const showTableModal = ref(false); 
 
+// ESTADO DE RACHA
+const activeExerciseIndex = ref(0);
+const MAX_EXERCISES = 5;
+
+// Variable de seguridad para evitar saltos dobles
+const isTransitioning = ref(false);
+
+// REFERENCIAS
+const scrollContainer = ref(null);
 const inputsRef = ref({});
 const uid = Math.random().toString(36).substring(7);
 
@@ -41,7 +53,7 @@ const currentHint = ref({
   theme: THEMES[0]
 });
 
-// --- LÓGICA DE TABLA DE MULTIPLICAR (AYUDA) ---
+// --- LÓGICA DE TABLA DE MULTIPLICAR ---
 const multiplicationTable = computed(() => {
     const d = divisor.value;
     const list = [];
@@ -183,10 +195,11 @@ watch(activeKey, (newKey) => {
             const el = inputsRef.value[newKey]; 
             if (el) {
                 el.focus();
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             } 
         });
     } else if (isSelectionComplete.value && orderedKeys.value.length > 0 && !newKey) {
+        // El watcher intentaba llamar a checkFullSuccess, pero la guardia ahora evitará duplicados
         checkFullSuccess();
     }
     calculateHint();
@@ -201,6 +214,9 @@ watch(waitingForDropIndex, (newVal) => {
 
 // --- INTERACCIONES ---
 const handleDigitClick = (index) => {
+    // Bloqueo de seguridad
+    if (isTransitioning.value) return;
+
     if (!isSelectionComplete.value) {
         const currentLen = selectedIndices.value.length;
         if (selectedIndices.value.includes(index)) {
@@ -246,13 +262,38 @@ const handleInputChange = (key, value) => {
 };
 
 const handleKeypadPress = (num) => {
-    if (waitingForDropIndex.value !== null) return;
+    // Bloqueo de seguridad
+    if (isTransitioning.value) return;
+
+    // Teclado para selección inicial
+    if (!isSelectionComplete.value) {
+        const expectedIndex = selectedIndices.value.length;
+        const digitStr = dividend.value.toString()[expectedIndex];
+        if (digitStr && parseInt(digitStr) === num) {
+            handleDigitClick(expectedIndex);
+        }
+        return;
+    }
+
+    // Teclado para bajar cifra
+    if (waitingForDropIndex.value !== null) {
+        const digitStr = dividend.value.toString()[waitingForDropIndex.value];
+        const digit = parseInt(digitStr);
+        if (num === digit) {
+            handleDigitClick(waitingForDropIndex.value);
+        }
+        return;
+    }
+
     if (activeKey.value) {
         handleInputChange(activeKey.value, num.toString());
     }
 };
 
 const handleDelete = () => {
+    // Bloqueo de seguridad
+    if (isTransitioning.value) return;
+
     if (!isSelectionComplete.value && selectedIndices.value.length > 0) {
          selectedIndices.value.pop();
          calculateHint();
@@ -280,10 +321,43 @@ const checkValueCorrectness = (key, val) => {
 };
 
 const checkFullSuccess = () => {
+    // CAMBIO CRÍTICO: GUARDIA DE SEGURIDAD
+    // Si ya estamos en transición o éxito, ignoramos llamadas duplicadas.
+    if (isSuccess.value || isTransitioning.value) return;
+
     const allDone = orderedKeys.value.every(k => checkValueCorrectness(k, userInputs.value[k]));
     if (allDone && orderedKeys.value.length > 0) {
+        // EJERCICIO COMPLETADO
         isSuccess.value = true;
-        showConfetti.value = true;
+        isTransitioning.value = true; // Activar bloqueo
+        
+        // 1. Pagar Monedas
+        gamificationStore.addCoins('gold', 3);
+
+        // 2. Felicitar con VOZ
+        const frases = ["¡Excelente!", "¡Muy bien!", "¡Lo lograste!", "¡Eres genial!"];
+        const frase = frases[Math.floor(Math.random() * frases.length)];
+        speak(`${frase} Ganaste 3 monedas de oro.`);
+
+        // 3. Scroll Automático arriba
+        if (scrollContainer.value) {
+            scrollContainer.value.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 4. Control de Racha con PAUSA
+        if (activeExerciseIndex.value < MAX_EXERCISES - 1) {
+            setTimeout(() => {
+                activeExerciseIndex.value++;
+                isTransitioning.value = false; // LIBERAR BLOQUEO
+                generateNewProblem(); 
+            }, 1500);
+        } else {
+            // PAUSA DRAMÁTICA DE 5 SEGUNDOS
+            setTimeout(() => {
+                showCoinRain.value = true;
+                speak("¡Misión cumplida! Completaste la serie.");
+            }, 5000);
+        }
     }
 };
 
@@ -292,11 +366,17 @@ const focusInput = (key) => {
     if (el) el.focus();
 };
 
+const resetSequence = () => {
+    activeExerciseIndex.value = 0;
+    generateNewProblem();
+};
+
 const generateNewProblem = () => {
     let newDivisor, newDividend;
     if (forcedDivisor.value !== 'random') newDivisor = parseInt(forcedDivisor.value); 
     else newDivisor = Math.floor(Math.random() * 8) + 2; 
     
+    // USAMOS EL BOTÓN DE DIFICULTAD SELECCIONADO
     if (difficulty.value === 1) newDividend = Math.floor(Math.random() * 800) + 100; 
     else newDividend = Math.floor(Math.random() * 9000) + 1000; 
     
@@ -311,19 +391,31 @@ const setProblem = (div, dvr) => {
     userInputs.value = {};
     selectedIndices.value = [];
     isSelectionComplete.value = false;
-    showConfetti.value = false;
+    showCoinRain.value = false;
     isSuccess.value = false;
+    // Asegurar desbloqueo al iniciar nuevo problema
+    isTransitioning.value = false;
     inputsRef.value = {};
     solutionSteps.value = solveDivision(div, dvr);
+    
+    if (scrollContainer.value) {
+        scrollContainer.value.scrollTop = 0;
+    }
+    
     calculateHint();
 };
 
-onMounted(generateNewProblem);
-watch([difficulty, forcedDivisor], generateNewProblem);
+onMounted(resetSequence);
+
+watch([difficulty, forcedDivisor], resetSequence);
 
 const calculateHint = () => {
     if (isSuccess.value) {
-        currentHint.value = { message: "¡INCREÍBLE! ¡Lo has logrado!", activeKeys: [], theme: THEMES[0] };
+        if (activeExerciseIndex.value === MAX_EXERCISES - 1) {
+             currentHint.value = { message: "¡SERIE COMPLETADA! ¡Eres un genio!", activeKeys: [], theme: THEMES[0] };
+        } else {
+             currentHint.value = { message: "¡Muy bien! ¡Vamos por el siguiente!", activeKeys: [], theme: THEMES[0] };
+        }
         return;
     }
 
@@ -362,7 +454,7 @@ const calculateHint = () => {
             msg = `¿Qué número multiplicado por ${divisor.value} se acerca a ${step.hintPart}? Piensa: ${divisor.value} x ${step.value} = ${product}.`;
         
         } else if (step.type === 'product') {
-            msg = `Exacto. Ahora escribe el resultado de multiplicar ${step.quotientDigit} x ${divisor.value}.`;
+            msg = `Exacto. Ahora escribe el resultado de multiplicar ${step.quotientDigit} x ${divisor.value} = ${step.value}.`;
         
         } else if (step.type === 'remainder' || step.type === 'finalRemainder') {
             const minuendo = step.minuend;
@@ -407,7 +499,9 @@ const isFinalRemainder = (row, col) => {
 <template>
   <div class="h-[100dvh] w-full bg-slate-100 font-sans flex justify-center overflow-hidden select-none">
     
-    <SimpleConfetti :isActive="showConfetti" />
+    <div v-if="showCoinRain">
+        <CoinRain type="gold" :count="50" />
+    </div>
     
     <div class="w-full max-w-xl h-full flex flex-col bg-blue-600 shadow-2xl relative">
         
@@ -456,7 +550,7 @@ const isFinalRemainder = (row, col) => {
                         </span>
                         División
                     </h1>
-                     <button @click="generateNewProblem" class="p-1.5 rounded-lg text-white font-bold shadow-md active:scale-95 transition-all bg-yellow-500 hover:bg-yellow-400">
+                      <button @click="resetSequence" class="p-1.5 rounded-lg text-white font-bold shadow-md active:scale-95 transition-all bg-yellow-500 hover:bg-yellow-400">
                         <RefreshCw :size="18" />
                     </button>
                 </div>
@@ -470,7 +564,7 @@ const isFinalRemainder = (row, col) => {
                       <div class="flex flex-row gap-2 items-center bg-blue-700/50 p-1.5 rounded-xl shadow-sm border border-blue-500/50">
                         <div class="flex items-center gap-1 px-2">
                             <span class="text-xs text-blue-200 font-bold hidden sm:inline">Tabla:</span>
-                            <select v-model="forcedDivisor" class="font-black text-base text-white bg-transparent outline-none cursor-pointer w-auto text-right md:text-center appearance-none">
+                            <select v-model="forcedDivisor" @change="resetSequence" class="font-black text-base text-white bg-transparent outline-none cursor-pointer w-auto text-right md:text-center appearance-none">
                                 <option value="random" class="text-slate-900">Aleatoria</option>
                                 <option v-for="n in 10" :key="n" :value="n" class="text-slate-900">{{ n }}</option>
                             </select>
@@ -491,7 +585,7 @@ const isFinalRemainder = (row, col) => {
                 </div>
                 <div>
                     <h3 :class="`font-black text-[10px] uppercase tracking-widest mb-0.5 ${currentHint.theme.text}`">
-                        {{ isSuccess ? '¡Completado!' : (!isSelectionComplete ? 'Paso 1: Selección' : 'Profesor Búho Dice:') }}
+                        {{ isSuccess ? (activeExerciseIndex === MAX_EXERCISES - 1 ? '¡SERIE COMPLETADA!' : '¡Excelente!') : (!isSelectionComplete ? 'Paso 1: Selección' : 'Profesor Búho Dice:') }}
                     </h3>
                     <p class="text-sm sm:text-base font-bold text-slate-700 leading-tight">
                         {{ currentHint.message }}
@@ -501,11 +595,20 @@ const isFinalRemainder = (row, col) => {
         </div>
 
         <div class="flex-1 w-full overflow-hidden relative bg-blue-600 rounded-t-[2rem] mt-2 shadow-inner">
-            <div class="w-full h-full overflow-y-auto p-4 flex flex-col items-center">
+            <div ref="scrollContainer" class="w-full h-full overflow-y-auto p-4 flex flex-col items-center">
                 
                 <div class="bg-[#fff9c4] border-4 border-[#fbc02d] rounded-2xl shadow-2xl p-2 w-[98%] max-w-lg relative transition-all duration-300 my-auto"
-                     style="background-image: linear-gradient(#e1f5fe 1px, transparent 1px); background-size: 100% 2em; padding-top: 2rem;">
+                     :class="isSuccess ? 'bg-green-100 border-green-400' : ''"
+                     style="background-image: linear-gradient(#e1f5fe 1px, transparent 1px); background-size: 100% 2em; padding-top: 2rem; padding-bottom: 2rem;">
                     
+                    <div v-if="isSuccess" class="absolute inset-0 flex items-start justify-center z-50 pointer-events-none animate-fade-in pt-24">
+                         <Check class="w-64 h-64 text-green-500/50 drop-shadow-sm" stroke-width="5" />
+                    </div>
+
+                    <div class="absolute -top-4 -left-2 bg-white text-slate-700 font-black text-lg md:text-xl w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-md border-2 border-slate-200 z-20">
+                        {{ activeExerciseIndex + 1 }}
+                    </div>
+
                     <div class="absolute top-0 bottom-0 left-6 w-1 bg-red-300 opacity-50"></div>
                     
                     <div class="flex items-start gap-4 pl-2 relative z-10 justify-center">
@@ -538,7 +641,7 @@ const isFinalRemainder = (row, col) => {
                                               @click="activeKey.value = `grid-${r}-${c}`"
                                           />
                                           <div v-if="solutionSteps.some(s => s.type === 'product' && s.row === r && c >= s.colEnd - s.value.toString().length + 1 && c <= s.colEnd)" 
-                                                 class="absolute bottom-0 left-0 right-0 border-b-2 border-slate-800 pointer-events-none"></div>
+                                                  class="absolute bottom-0 left-0 right-0 border-b-2 border-slate-800 pointer-events-none"></div>
                                           <span v-if="solutionSteps.some(s => s.type === 'product' && s.row === r && s.colEnd - s.value.toString().length === c - 1)"
                                                   class="absolute -left-3 top-1 text-slate-500 font-bold pointer-events-none text-sm">-</span>
                                           <span v-if="isFinalRemainder(r, c)" class="absolute left-full ml-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 tracking-widest px-1 whitespace-nowrap uppercase">Residuo</span>

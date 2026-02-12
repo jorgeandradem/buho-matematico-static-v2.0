@@ -7,9 +7,16 @@ import {
 import OwlImage from './OwlImage.vue';
 import { playOwlHoot } from '../utils/sound'; 
 import { incentiveMessages } from '../utils/messages';
+import StatusBoard from './StatusBoard.vue';
+import SessionSummary from './SessionSummary.vue';
+import { useGamificationStore } from '../stores/useGamificationStore';
+import { speak } from '../utils/voice';
 
 const emit = defineEmits(['select', 'exit']);
 const props = defineProps(['fromView']);
+
+// Conexión con el Banco
+const gamificationStore = useGamificationStore();
 
 const randomIncentive = ref("");
 const studentName = ref(localStorage.getItem('owlStudentName') || "");
@@ -17,20 +24,8 @@ const isEditingName = ref(!localStorage.getItem('owlStudentName'));
 const showOwl = ref(false); 
 const greeting = ref("");
 
-// --- SISTEMA DE VOZ ---
-const speak = (text) => {
-  if (!('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'es-ES'; 
-  utterance.rate = 1.0;     
-  utterance.pitch = 1.1;    
-  utterance.volume = 1.0;
-  const voices = window.speechSynthesis.getVoices();
-  const spanishVoice = voices.find(v => v.lang.includes('es'));
-  if (spanishVoice) utterance.voice = spanishVoice;
-  window.speechSynthesis.speak(utterance);
-};
+// Variable para controlar el Modal de Resumen localmente
+const showSummary = ref(false);
 
 const pickRandomMessage = () => {
   const randomIndex = Math.floor(Math.random() * incentiveMessages.length);
@@ -68,22 +63,19 @@ const startGame = () => {
     });
 };
 
-// --- COREOGRAFÍA DE SALIDA ---
 const handleExit = () => {
-    const byeText = studentName.value ? `¡Hasta pronto ${studentName.value}!` : "¡Hasta pronto!";
-    greeting.value = byeText;
-    showOwl.value = true; 
-    speak(byeText);
-    playOwlHoot(); 
-    
-    setTimeout(() => {
-        emit('exit');
-    }, 2000);
+    // Al pulsar salir, mostramos el Resumen dentro del contenedor
+    showSummary.value = true;
+};
+
+const finalExit = () => {
+    showSummary.value = false;
+    emit('exit');
 };
 
 onMounted(() => {
+  gamificationStore.loadFromStorage();
   pickRandomMessage();
-  if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
 
   if (props.fromView && ['add', 'sub', 'mult', 'div'].includes(props.fromView)) {
       setTimeout(() => { openConfig(props.fromView); }, 50);
@@ -93,11 +85,10 @@ onMounted(() => {
 
   setTimeout(() => {
     showOwl.value = true;
-    
     if (isComingFromCover) {
         const helloText = studentName.value ? `¡Hola ${studentName.value}!` : "¡Hola! ¿Cómo te llamas?";
         greeting.value = helloText;
-        speak(helloText);
+        speak(helloText); 
         setTimeout(() => { showOwl.value = false; }, 4000);
     } else {
         greeting.value = "¡Sigamos practicando!";
@@ -126,6 +117,10 @@ const currentSubjectLabel = computed(() => {
     
     <div class="w-full max-w-xl h-full flex flex-col bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl relative overflow-hidden p-4">
     
+        <div v-if="showSummary" class="absolute inset-0 z-[100]">
+            <SessionSummary @close="finalExit" />
+        </div>
+
         <div v-if="showConfigModal" class="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
             <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl relative flex flex-col gap-4 border-4 border-indigo-100 max-h-[90vh] overflow-y-auto">
                 <button @click="showConfigModal = false" class="absolute top-3 right-3 text-slate-400 hover:text-red-500"><CloseIcon /></button>
@@ -148,7 +143,11 @@ const currentSubjectLabel = computed(() => {
                 </div>
 
                 <button @click="startGame" class="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-lg shadow-lg active:scale-95 flex items-center justify-center gap-2 mt-2">
-                    <Play :size="20" fill="currentColor" /> ¡JUGAR!
+                    <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2">
+                            <Play :size="20" fill="currentColor" /> ¡JUGAR!
+                        </div>
+                    </div>
                 </button>
             </div>
         </div>
@@ -159,7 +158,7 @@ const currentSubjectLabel = computed(() => {
              <div class="w-10"></div> 
         </header>
 
-        <div class="w-full grid grid-cols-2 px-2 z-20 mb-2 items-end h-32">
+        <div class="w-full grid grid-cols-2 px-2 z-20 mb-2 items-end h-32 shrink-0">
            <div class="flex items-center justify-center pb-2">
                <div v-if="showOwl" class="bg-white rounded-xl p-3 shadow-lg border-2 border-indigo-200 relative animate-fade-in w-full text-center transition-all duration-500">
                   <p class="text-indigo-900 font-bold text-sm">{{ greeting }}</p>
@@ -178,7 +177,7 @@ const currentSubjectLabel = computed(() => {
            </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-6 w-full flex-1 content-start py-6 z-10 px-2">
+        <div class="grid grid-cols-2 gap-6 w-full py-4 z-10 px-2 flex-none">
           <button v-for="opt in options" :key="opt.id" @click="openConfig(opt.id)"
             class="group bg-white p-4 rounded-3xl border-4 border-white hover:border-indigo-200 shadow-xl active:scale-95 flex flex-col items-center justify-center gap-2 h-full min-h-[130px] transition-all">
             <div :class="`w-14 h-14 rounded-full ${opt.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`">
@@ -191,14 +190,20 @@ const currentSubjectLabel = computed(() => {
           </button>
         </div>
 
-        <div class="bg-indigo-50/90 rounded-2xl border-2 border-indigo-100 p-3 flex items-center justify-center gap-3 shadow-sm w-full mt-4 mb-4 animate-fade-in">
-          <BookOpen class="text-indigo-600 shrink-0" :size="20" />
-          <p class="text-slate-800 text-xs sm:text-sm font-black italic text-center">
-            {{ randomIncentive }}
-          </p>
+        <div class="mt-auto w-full flex flex-col gap-2 z-20 pb-4 px-2">
+            
+            <div class="bg-indigo-50/90 rounded-2xl border-2 border-indigo-100 p-3 flex items-center justify-center gap-3 shadow-sm w-full animate-fade-in">
+                <BookOpen class="text-indigo-600 shrink-0" :size="20" />
+                <p class="text-slate-800 text-xs sm:text-sm font-black italic text-center leading-tight">
+                    {{ randomIncentive }}
+                </p>
+            </div>
+
+            <StatusBoard />
         </div>
 
     </div>
+    
   </div>
 </template>
 

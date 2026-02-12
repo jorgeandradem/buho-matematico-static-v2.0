@@ -3,11 +3,14 @@ import { ref, computed, nextTick, onMounted, watch } from 'vue';
 import { 
   ChevronLeft, Eraser, Eye, EyeOff, HelpCircle, X as CloseIcon, 
   Plus, Minus, X as MultiplyIcon, Divide, ChevronDown, 
-  Check 
+  Check, BookOpen 
 } from 'lucide-vue-next';
 import SmartGuide from './SmartGuide.vue';
-import SimpleConfetti from './SimpleConfetti.vue';
+import CoinRain from './CoinRain.vue';
 import VirtualKeypad from './VirtualKeypad.vue';
+import { useGamificationStore } from '../stores/useGamificationStore';
+// CAMBIO: Importamos la voz
+import { speak } from '../utils/voice';
 
 const props = defineProps({
   operation: { type: String, default: 'add' },
@@ -15,47 +18,55 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['back']);
+const gamificationStore = useGamificationStore(); 
 
 // --- ESTADOS ---
-const showSolution = ref(false);
-const showConfetti = ref(false);
+const showSolution = ref(false); // Modal de Tablas
+const showCoinRain = ref(false); 
 const activeExerciseIndex = ref(0);
 const activeCell = ref(null); 
 const currentInputTask = ref({ expected: null, nextFn: null, id: null, exIdx: null });
-const selectedTableMode = ref('current');
 
-watch(showSolution, (newVal) => { if (newVal) selectedTableMode.value = 'current'; });
+// Nuevo estado para la tabla seleccionada en el modal (por defecto la del 1)
+const selectedHelpTable = ref(1);
 
-// --- LÓGICA DE SOLUCIONES ---
-const displayedSolutions = computed(() => {
-    if (selectedTableMode.value === 'current') {
-        return exercises.value.map(ex => {
-            let res = 0;
-            if (props.operation === 'add') res = ex.top + ex.bot;
-            else if (props.operation === 'sub') res = ex.top - ex.bot;
-            else if (props.operation === 'div') res = ex.top / ex.bot;
-            else res = ex.top * ex.bot;
-            return { id: ex.id, n1: ex.top, op: operatorSymbol.value, n2: ex.bot, result: res, isCurrent: true };
-        });
-    } else {
-        const tableNum = parseInt(selectedTableMode.value);
-        const list = [];
-        for (let i = 1; i <= 10; i++) {
-            let n1, op, n2, res;
-            if (props.operation === 'add') { n1 = tableNum; op = '+'; n2 = i; res = n1 + n2; }
-            else if (props.operation === 'sub') { n2 = tableNum; op = '-'; n1 = tableNum + i; res = i; }
-            else if (props.operation === 'div') { n1 = tableNum * i; op = '÷'; n2 = tableNum; res = i; }
-            else { n1 = tableNum; op = 'x'; n2 = i; res = n1 * n2; }
-            list.push({ id: `tbl-${i}`, n1, op, n2, result: res, isCurrent: false });
+const rewardCoinType = computed(() => {
+    return props.operation === 'mult' ? 'gold' : 'silver';
+});
+
+// --- GENERADOR DE TABLAS DE AYUDA ---
+const helpTableData = computed(() => {
+    const tableNum = selectedHelpTable.value;
+    const list = [];
+    const symbol = operatorSymbol.value; 
+
+    for (let i = 1; i <= 10; i++) {
+        let n1, n2, res;
+        
+        if (props.operation === 'add') {
+            n1 = tableNum; n2 = i; res = n1 + n2;
+        } 
+        else if (props.operation === 'sub') {
+            n2 = tableNum; 
+            res = i;       
+            n1 = n2 + res; 
+        } 
+        else if (props.operation === 'mult') {
+            n1 = tableNum; n2 = i; res = n1 * n2;
+        } 
+        else { 
+            n2 = tableNum; res = i; n1 = n2 * res;
         }
-        return list;
+        
+        list.push({ n1, op: symbol, n2, res });
     }
+    return list;
 });
 
 const operatorSymbol = computed(() => {
     if (props.operation === 'add') return '+';
     if (props.operation === 'sub') return '-';
-    if (props.operation === 'mult') return 'x';
+    if (props.operation === 'mult') return '×';
     if (props.operation === 'div') return '÷';
     return '?';
 });
@@ -117,8 +128,8 @@ const generateRandomExercise = (id) => {
 
 const exercises = ref(Array.from({ length: 5 }, (_, i) => generateRandomExercise(i)));
 
-// --- MOTOR DE MATRIZ RÍGIDA (CEREBRO MATEMÁTICO INTEGRAL) ---
-const processStandardOperation = (ex) => {
+// --- MOTOR DE MATRIZ RÍGIDA ---
+const processStandardOperation = (ex, exIndex) => {
   if (!ex) return null;
   
   const tDigits = ex.top.toString().split('').reverse().map(Number);
@@ -176,6 +187,7 @@ const processStandardOperation = (ex) => {
       let subEffectiveTop = 0;
       let owlTotalSum = 0;
       let owlNextCarry = 0;
+      let isLenderVisible = false;
 
       // --- LÓGICA RESTA ---
       if (props.operation === 'sub') {
@@ -185,6 +197,15 @@ const processStandardOperation = (ex) => {
           const isLender = borrowedStatus[i]; 
           const valAfterLending = tOrg - (isLender ? 1 : 0); 
           const isBorrower = subEffectiveTop > valAfterLending; 
+
+          if (isLender) {
+              if (i > 0) {
+                  const prevKey = `in-${exIndex}-c${i-1}-carry`; 
+                  if (ex.inputs && ex.inputs[prevKey] === 'correct') {
+                      isLenderVisible = true;
+                  }
+              }
+          }
 
           if (isLender && isBorrower) {
               showOval = true; ovalValue = subEffectiveTop; owlMsgType = 'sub_lender_borrower';
@@ -199,7 +220,6 @@ const processStandardOperation = (ex) => {
 
       // --- LÓGICA SUMA / MULT ---
       } else {
-          // Diferenciar Suma vs Mult
           const product = props.operation === 'mult' ? tOrg * b : tOrg + b;
           const valTotal = product + carry;
           
@@ -212,7 +232,6 @@ const processStandardOperation = (ex) => {
               else if (owlNextCarry > 0) owlMsgType = 'add_carry_tx'; 
               else owlMsgType = 'add_simple';
           } else if (props.operation === 'mult') {
-              // Nueva lógica para Multiplicación
               if (carry > 0) owlMsgType = 'mult_carry_rx';
               else if (owlNextCarry > 0) owlMsgType = 'mult_carry_tx';
               else owlMsgType = 'mult_simple';
@@ -237,19 +256,19 @@ const processStandardOperation = (ex) => {
           showOval, 
           ovalValue, 
           fullBot: ex.bot,
-          // Datos Búho
           owlMsgType,
           subEffectiveTop,
           owlTotalSum,
           owlNextCarry,
-          owlPrevCarry: (props.operation === 'add' || props.operation === 'mult' ? (showOval ? ovalValue : 0) : 0)
+          owlPrevCarry: (props.operation === 'add' || props.operation === 'mult' ? (showOval ? ovalValue : 0) : 0),
+          isLenderVisible 
       });
   }
   return { ...ex, processedCols: columns };
 };
 
 const computedExercises = computed(() => {
-  return exercises.value.map(ex => processStandardOperation(ex));
+  return exercises.value.map((ex, i) => processStandardOperation(ex, i));
 });
 
 const currentExercise = computed(() => {
@@ -257,7 +276,24 @@ const currentExercise = computed(() => {
   return computedExercises.value[activeExerciseIndex.value];
 });
 
-// --- CEREBRO DEL BÚHO INTELIGENTE (3 OPERACIONES) ---
+// --- HELPER VISUAL ---
+const shouldShowCheck = (colIdx) => {
+    if (props.operation !== 'mult') return false;
+    const ex = currentExercise.value;
+    if (ex && ex.completed) return true;
+    if (activeCell.value) return colIdx <= activeCell.value.colIdx;
+    return false;
+};
+
+const isCheckActive = (colIdx) => {
+    if (props.operation !== 'mult') return false;
+    const ex = currentExercise.value;
+    if (ex && ex.completed) return false;
+    if (activeCell.value) return colIdx === activeCell.value.colIdx;
+    return false;
+};
+
+// --- BÚHO ---
 const owlAdvice = computed(() => {
   const ex = currentExercise.value;
   if (!activeCell.value || !ex) return "¡Vamos búho!";
@@ -272,7 +308,7 @@ const owlAdvice = computed(() => {
 
   if (!col) return "Selecciona casilla.";
 
-  // === RESTA AVANZADA ===
+  // === RESTA ===
   if (props.operation === 'sub') {
       const effTop = col.subEffectiveTop;
       const orgTop = col.top;
@@ -290,7 +326,7 @@ const owlAdvice = computed(() => {
       if (type === 'result') return `Resta ${effTop} - ${bot} = ${col.expectedResult}. Escríbelo.`;
   }
 
-  // === SUMA AVANZADA ===
+  // === SUMA ===
   if (props.operation === 'add') {
       if (type === 'carry') return `Escribe el ${col.ovalValue} que te dio tu vecino.`;
       if (type === 'result') {
@@ -310,21 +346,25 @@ const owlAdvice = computed(() => {
       }
   }
   
-  // === MULTIPLICACIÓN AVANZADA (NIVEL 1) ===
-  // Nota: Nombrar primero al Multiplicador (bot) y luego al Multiplicando (top)
+  // === MULTIPLICACIÓN ===
   if (props.operation === 'mult' && col.type === 'DATA') {
       if (type === 'carry') return `Escribe el ${col.ovalValue} que llevas de la multiplicación anterior.`;
       
       if (type === 'result') {
           const t = col.top;
-          const b = col.bot; // En mult nivel 1, bot es un solo dígito
+          const b = col.bot; 
           const total = col.owlTotalSum;
           const nextC = col.owlNextCarry;
           const resD = col.expectedResult;
           const prevC = col.owlPrevCarry;
 
+          if (!col.isTopVisible) {
+              if (prevC > 0) return `Como ya no hay más números arriba, baja el ${prevC} que llevabas al resultado.`;
+              else return `¡Ya casi terminamos!`;
+          }
+
           if (col.owlMsgType === 'mult_carry_rx') {
-              const baseProd = b * t; // Orden visual b x t
+              const baseProd = b * t; 
               return `Multiplica ${b} x ${t} = ${baseProd}. Más ${prevC} que llevas son ${total}. Escribe ${resD}${nextC > 0 ? ' y lleva ' + nextC : '.'}`;
           } else if (nextC > 0) {
               return `Multiplica ${b} x ${t} = ${total}. Escribe ${resD} y lleva ${nextC} en las unidades.`;
@@ -333,7 +373,6 @@ const owlAdvice = computed(() => {
           }
       }
   }
-  
   return "Toca la casilla y escribe.";
 });
 
@@ -385,7 +424,6 @@ const autoFocus = () => {
     if(!ex) return;
     const firstDataCol = ex.processedCols.find(c => c.type === 'DATA' && c.colIdx === 0);
     if(firstDataCol) {
-        // Inicio inteligente: si hay que pedir prestado o sumar llevada (y el ovalo es visible), empezamos ahí
         const startType = (firstDataCol.showOval) ? 'carry' : 'result';
         handleFocus(idx, startType, 0, null, startType==='carry' ? firstDataCol.ovalValue : firstDataCol.expectedResult, () => nextStepStd(idx, 0, startType));
     }
@@ -396,13 +434,11 @@ const nextStepStd = (idx, colIdx, type) => {
   const ex = currentExercise.value; if (!ex) return;
   const col = ex.processedCols.find(c => c.colIdx === colIdx);
 
-  // 1. De Óvalo a Resultado (Misma columna)
   if (type === 'carry') {
       handleFocus(idx, 'result', colIdx, null, col.expectedResult, () => nextStepStd(idx, colIdx, 'result'));
       return;
   }
 
-  // 2. De Resultado a Siguiente Columna (Izquierda)
   const nextColIndex = colIdx + 1;
   const nextCol = ex.processedCols.find(c => c.colIdx === nextColIndex);
 
@@ -414,8 +450,21 @@ const nextStepStd = (idx, colIdx, type) => {
       exercises.value[idx].completed = true; 
       activeCell.value = null; 
       
+      const amount = props.operation === 'mult' ? 2 : 5; 
+      gamificationStore.addCoins(rewardCoinType.value, amount);
+
+      // CAMBIO: Voz de felicitación
+      const frases = ["¡Excelente!", "¡Muy bien!", "¡Lo lograste!", "¡Eres genial!"];
+      const frase = frases[Math.floor(Math.random() * frases.length)];
+      const nombreMoneda = rewardCoinType.value === 'gold' ? 'de oro' : 'de plata';
+      speak(`${frase} Ganaste ${amount} monedas ${nombreMoneda}.`);
+
       if (idx === exercises.value.length - 1) { 
-          showConfetti.value = true; 
+          // CAMBIO: Pausa dramática al final (3.5 segundos)
+          setTimeout(() => {
+              showCoinRain.value = true;
+              speak("¡Fantástico! Has terminado todos los ejercicios.");
+          }, 3500);
       } else {
           setTimeout(() => {
               activeExerciseIndex.value++;
@@ -426,7 +475,7 @@ const nextStepStd = (idx, colIdx, type) => {
 };
 
 const fullReset = async () => {
-  showConfetti.value = false; activeExerciseIndex.value = 0; exercises.value = Array.from({ length: 5 }, (_, i) => generateRandomExercise(i)); showSolution.value = false; await nextTick(); autoFocus(); 
+  showCoinRain.value = false; activeExerciseIndex.value = 0; exercises.value = Array.from({ length: 5 }, (_, i) => generateRandomExercise(i)); showSolution.value = false; await nextTick(); autoFocus(); 
 };
 
 onMounted(autoFocus);
@@ -435,37 +484,52 @@ onMounted(autoFocus);
 <template>
   <div class="h-[100dvh] w-full bg-slate-100 flex justify-center overflow-hidden font-sans select-none">
     
-    <SimpleConfetti :isActive="showConfetti" />
+    <div v-if="showCoinRain">
+        <CoinRain :type="rewardCoinType" :count="30" />
+    </div>
     
     <div class="w-full max-w-xl h-full flex flex-col bg-white shadow-2xl relative">
 
         <div v-if="showSolution" class="absolute inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" @click.self="showSolution = false">
-            <div class="bg-white rounded-2xl shadow-2xl w-[90%] max-w-xs border-4 border-indigo-100 overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-white rounded-2xl shadow-2xl w-[90%] max-w-sm border-4 border-indigo-100 overflow-hidden flex flex-col max-h-[85vh]">
+                
                 <div class="bg-indigo-50 p-3 border-b border-indigo-100 flex justify-between items-center text-slate-700 font-black shrink-0">
-                    <div class="flex items-center gap-2"><HelpCircle :size="20" class="text-indigo-500"/> Soluciones</div>
-                    <button @click="showSolution = false" class="p-1 bg-white rounded-full text-slate-400 hover:text-red-500 transition shadow-sm"><CloseIcon :size="20" /></button>
+                    <div class="flex items-center gap-2">
+                        <BookOpen :size="20" class="text-indigo-500"/> Tablas de Ayuda
+                    </div>
+                    <button @click="showSolution = false" class="p-1 bg-white rounded-full text-slate-400 hover:text-red-500 transition shadow-sm">
+                        <CloseIcon :size="20" />
+                    </button>
                 </div>
-                <div class="p-2 bg-white border-b border-slate-100 shrink-0">
-                    <div class="relative">
-                        <select v-model="selectedTableMode" class="w-full p-2.5 pl-4 pr-10 bg-slate-50 border-2 border-indigo-100 text-slate-700 font-bold rounded-xl appearance-none focus:outline-none focus:border-indigo-400 transition-colors cursor-pointer">
-                            <option value="current">📝 Ver mis ejercicios actuales</option>
-                            <option disabled>──────────</option>
-                            <option v-for="n in 10" :key="n" :value="n">{{ operation === 'add' ? `➕ Tabla del ${n}` : (operation === 'sub' ? `➖ Tabla del ${n}` : `✖️ Tabla del ${n}`) }}</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-indigo-400"><ChevronDown :size="20" stroke-width="3" /></div>
+
+                <div class="p-3 bg-white border-b border-slate-100 shrink-0">
+                    <p class="text-xs font-bold text-slate-400 uppercase text-center mb-2">Selecciona un número</p>
+                    <div class="grid grid-cols-5 gap-2">
+                        <button v-for="n in 10" :key="n" 
+                            @click="selectedHelpTable = n"
+                            :class="[
+                                'py-2 rounded-lg font-black text-sm transition-all',
+                                selectedHelpTable === n 
+                                    ? 'bg-indigo-600 text-white shadow-md scale-105' 
+                                    : 'bg-slate-100 text-slate-500 hover:bg-indigo-100'
+                            ]">
+                            {{ n }}
+                        </button>
                     </div>
                 </div>
-                <div class="overflow-y-auto p-3 bg-white scrollbar-thin">
-                   <div class="grid grid-cols-1 gap-2">
-                       <div v-for="item in displayedSolutions" :key="item.id" class="flex justify-between items-center p-2 rounded-xl border shadow-sm transition-all" :class="item.isCurrent ? 'bg-slate-50 border-slate-100' : 'bg-indigo-50/50 border-indigo-100'">
-                           <span class="text-lg font-bold text-slate-600 font-mono">{{ item.n1 }} <span class="text-indigo-400 mx-1">{{ item.op }}</span> {{ item.n2 }}</span>
-                           <span class="text-xl font-black text-indigo-600">= {{ item.result }}</span>
+
+                <div class="overflow-y-auto p-4 bg-slate-50 scrollbar-thin flex-1">
+                   <div class="flex flex-col gap-2">
+                       <div v-for="(item, idx) in helpTableData" :key="idx" 
+                            class="flex justify-between items-center p-3 rounded-xl bg-white border border-slate-200 shadow-sm">
+                           <span class="text-lg font-bold text-slate-600 font-mono">
+                               {{ item.n1 }} <span class="text-indigo-400 mx-1">{{ item.op }}</span> {{ item.n2 }}
+                           </span>
+                           <span class="text-xl font-black text-indigo-600">= {{ item.res }}</span>
                        </div>
                    </div>
                 </div>
-                <div class="p-3 bg-slate-50 border-t border-slate-100 text-center shrink-0">
-                    <button @click="showSolution = false" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition">¡Entendido!</button>
-                </div>
+
             </div>
         </div>
         
@@ -485,7 +549,9 @@ onMounted(autoFocus);
                 <div class="text-xs md:text-sm font-bold text-slate-400 uppercase tracking-widest">Ej {{ activeExerciseIndex + 1 }} / 5</div>
                 <div class="flex gap-2">
                    <button @click="fullReset" class="p-2 md:p-2.5 bg-white shadow-sm rounded-lg text-slate-500 active:scale-95 transition hover:text-indigo-600" title="Reiniciar"><Eraser class="w-4 h-4 md:w-5 md:h-5" /></button>
-                   <button @click="showSolution = !showSolution" :class="`p-2 md:p-2.5 rounded-lg shadow-sm transition active:scale-95 ${showSolution ? 'bg-indigo-100 text-indigo-600 ring-2 ring-indigo-300' : 'bg-white text-slate-500 hover:text-indigo-600'}`"><component :is="showSolution ? EyeOff : Eye" class="w-4 h-4 md:w-5 md:h-5" /></button>
+                   <button @click="showSolution = true" :class="`p-2 md:p-2.5 rounded-lg shadow-sm transition active:scale-95 ${showSolution ? 'bg-indigo-100 text-indigo-600 ring-2 ring-indigo-300' : 'bg-white text-slate-500 hover:text-indigo-600'}`">
+                       <BookOpen class="w-4 h-4 md:w-5 md:h-5" />
+                   </button>
                 </div>
             </div>
             
@@ -506,8 +572,8 @@ onMounted(autoFocus);
                       :class="currentExercise.completed ? 'bg-green-100 border-green-400' : 'bg-[#fff9c4] border-yellow-400'"
                       style="background-image: linear-gradient(#e1f5fe 1px, transparent 1px); background-size: 100% 2.1rem;">
                     
-                    <div v-if="currentExercise.completed" class="absolute inset-0 flex items-center justify-center z-30 pointer-events-none animate-fade-in-scale">
-                        <Check class="w-48 h-48 md:w-64 md:h-64 text-green-500/40" stroke-width="4" />
+                    <div v-if="currentExercise.completed" class="absolute inset-0 flex items-center justify-center z-50 pointer-events-none animate-fade-in">
+                        <Check class="w-64 h-64 text-green-500/50 drop-shadow-sm" stroke-width="5" />
                     </div>
 
                     <div class="absolute top-0 bottom-0 left-4 md:left-8 w-0.5 bg-red-300 opacity-40"></div>
@@ -526,18 +592,27 @@ onMounted(autoFocus);
                                 <div v-else-if="col.type === 'GHOST'" class="w-14 md:w-[4.5rem] pointer-events-none"></div>
 
                                 <template v-else>
-                                    <div class="h-14 md:h-20 flex items-end justify-center w-full mb-1">
+                                    <div class="h-14 md:h-20 flex flex-col justify-end items-center w-full mb-1">
+                                        <div v-if="props.operation === 'sub' && col.isLenderVisible" 
+                                             class="text-red-500 font-black text-lg md:text-2xl mb-1 md:mb-2 z-10 animate-fade-in-down">
+                                            -1
+                                        </div>
+
                                         <div v-if="col.showOval" 
                                           :class="[ 'flex items-center justify-center cursor-pointer w-10 h-8 md:w-16 md:h-10 rounded-lg border-2 text-xl md:text-2xl font-bold shadow-inner transition-all z-10', 
-                                                   currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : 
-                                                   currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'error' ? 'bg-red-50 border-red-500 text-red-600 animate-shake' : 
-                                                   (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === col.colIdx && activeCell?.type === 'carry') ? 'bg-yellow-50 focus-neon' : 'bg-white border-slate-300' ]"
+                                                    currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : 
+                                                    currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'error' ? 'bg-red-50 border-red-500 text-red-600 animate-shake' : 
+                                                    (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === col.colIdx && activeCell?.type === 'carry') ? 'bg-yellow-50 focus-neon' : 'bg-white border-slate-300' ]"
                                           @click="handleFocus(activeExerciseIndex, 'carry', col.colIdx, null, col.ovalValue, () => nextStepStd(activeExerciseIndex, col.colIdx, 'carry'))">
                                             {{ currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry`] === 'correct' ? col.ovalValue : (currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-carry_val`] || '') }}
                                         </div>
                                     </div>
 
-                                    <div class="w-14 md:w-[4.5rem] h-16 md:h-20 flex items-center justify-center text-5xl md:text-6xl font-mono font-bold text-slate-700">
+                                    <div class="w-14 md:w-[4.5rem] h-16 md:h-20 flex items-center justify-center text-5xl md:text-6xl font-mono font-bold text-slate-700 relative">
+                                        <div v-if="shouldShowCheck(col.colIdx)" 
+                                             :class="['absolute -top-3 left-1/2 -translate-x-1/2 text-green-500 z-50', isCheckActive(col.colIdx) ? 'animate-heartbeat' : '']">
+                                            <Check :size="24" stroke-width="4" />
+                                        </div>
                                         {{ col.isTopVisible ? col.top : '' }}
                                     </div>
                                     
@@ -549,8 +624,8 @@ onMounted(autoFocus);
                                                    currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'correct' ? 'bg-green-100 border-green-500 text-green-700' : 
                                                    currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'error' ? 'bg-red-50 border-red-500 text-red-600 animate-shake' : 
                                                    (activeCell?.exIdx === activeExerciseIndex && activeCell?.colIdx === col.colIdx && activeCell?.type === 'result') ? 'bg-yellow-50 focus-neon' : 'bg-white border-slate-300' ]"
-                                      @click="handleFocus(activeExerciseIndex, 'result', col.colIdx, null, col.expectedResult, () => nextStepStd(activeExerciseIndex, col.colIdx, 'result'))">
-                                        {{ currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'correct' ? col.expectedResult : (currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result_val`] || '') }}
+                                          @click="handleFocus(activeExerciseIndex, 'result', col.colIdx, null, col.expectedResult, () => nextStepStd(activeExerciseIndex, col.colIdx, 'result'))">
+                                            {{ currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result`] === 'correct' ? col.expectedResult : (currentExercise.inputs[`in-${activeExerciseIndex}-c${col.colIdx}-result_val`] || '') }}
                                     </div>
                                 </template>
 
@@ -575,16 +650,13 @@ onMounted(autoFocus);
 @keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);} }
 .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-
-/* ANIMACIÓN DEL CHECK TRASLUCIDO */
 .animate-fade-in-scale { animation: fadeInScale 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
 @keyframes fadeInScale { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
-
+.animate-fade-in-down { animation: fadeInDown 0.4s ease-out forwards; }
+@keyframes fadeInDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 .scrollbar-thin::-webkit-scrollbar { width: 6px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background-color: #e2e8f0; border-radius: 20px; }
-
-/* EFECTO NEÓN PULSANTE */
 .focus-neon { 
   border-color: #FACC15 !important; 
   border-width: 3px !important; 
@@ -593,10 +665,17 @@ onMounted(autoFocus);
   z-index: 50 !important; 
   transform: scale(1.05);
 }
-
 @keyframes neon-pulse {
   0% { box-shadow: 0 0 5px rgba(250, 204, 21, 0.4); border-color: #eab308; }
   50% { box-shadow: 0 0 20px rgba(250, 204, 21, 0.7); border-color: #facc15; }
   100% { box-shadow: 0 0 5px rgba(250, 204, 21, 0.4); border-color: #eab308; }
+}
+@keyframes heartbeat {
+    0% { transform: translate(-50%, 0) scale(1); }
+    50% { transform: translate(-50%, 0) scale(1.3); }
+    100% { transform: translate(-50%, 0) scale(1); }
+}
+.animate-heartbeat {
+    animation: heartbeat 1.5s infinite ease-in-out;
 }
 </style>

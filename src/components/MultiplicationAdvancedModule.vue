@@ -1,40 +1,47 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
-import { ChevronLeft, Eraser, Eye, EyeOff, HelpCircle, X as CloseIcon, Plus, Check, ChevronDown } from 'lucide-vue-next';
+import { 
+  ChevronLeft, Eraser, Eye, EyeOff, HelpCircle, X as CloseIcon, 
+  Plus, Check, ChevronDown, BookOpen 
+} from 'lucide-vue-next';
 import SmartGuide from './SmartGuide.vue';
-import SimpleConfetti from './SimpleConfetti.vue';
+import CoinRain from './CoinRain.vue';
 import VirtualKeypad from './VirtualKeypad.vue';
+import { useGamificationStore } from '../stores/useGamificationStore';
+// Importamos la voz
+import { speak } from '../utils/voice';
 
 const emit = defineEmits(['back']);
+const gamificationStore = useGamificationStore(); 
 
 // --- ESTADOS ---
-const showConfetti = ref(false);
-const showSolution = ref(false);
+const showCoinRain = ref(false); 
+const showSolution = ref(false); // Modal de Tablas
 const activeExerciseIndex = ref(0);
 const isFinished = ref(false);
-const selectedTableMode = ref('current');
 
-// Números
+// Estado para la tabla de ayuda seleccionada
+const selectedHelpTable = ref(1);
+
+// Números del ejercicio
 const topNum = ref(0);
 const botNum = ref(0);
 
-// Secuencia
 const steps = ref([]);        
 const currentStepIdx = ref(0); 
 const userInputs = ref({});   
 
-watch(showSolution, (newVal) => { if (newVal) selectedTableMode.value = 'current'; });
+// NUEVO: Variable para bloquear acciones mientras cambia de ejercicio y evitar saltos
+const isTransitioning = ref(false);
 
-// --- SOLUCIONES ---
-const displayedSolutions = computed(() => {
-    if (selectedTableMode.value === 'current') {
-        return [{ id: 'curr', n1: topNum.value, op: '×', n2: botNum.value, result: topNum.value * botNum.value, isCurrent: true }];
-    } else {
-        const tableNum = parseInt(selectedTableMode.value);
-        const list = [];
-        for (let i = 1; i <= 10; i++) list.push({ id: `tbl-${i}`, n1: tableNum, op: '×', n2: i, result: tableNum * i, isCurrent: false });
-        return list;
+// --- GENERADOR DE TABLA DE AYUDA (Solo Multiplicación) ---
+const helpTableData = computed(() => {
+    const tableNum = selectedHelpTable.value;
+    const list = [];
+    for (let i = 1; i <= 10; i++) {
+        list.push({ n1: tableNum, op: '×', n2: i, res: tableNum * i });
     }
+    return list;
 });
 
 // --- GENERADOR ---
@@ -42,6 +49,8 @@ const generateNumbers = () => {
     isFinished.value = false;
     userInputs.value = {};
     currentStepIdx.value = 0;
+    // NUEVO: Aseguramos que el bloqueo esté desactivado al iniciar
+    isTransitioning.value = false;
     topNum.value = Math.floor(Math.random() * (9999 - 10 + 1)) + 10;
     botNum.value = Math.floor(Math.random() * (99 - 10 + 1)) + 10;
     calculateSteps();
@@ -61,13 +70,21 @@ const calculateSteps = () => {
     const bUnit = bDigits[0];
     
     for (let i = 0; i < tDigits.length; i++) {
-        const product = (tDigits[i] * bUnit) + carry;
-        const resultDigit = product % 10;
-        const nextCarry = Math.floor(product / 10);
+        const productBase = tDigits[i] * bUnit;
+        const productTotal = productBase + carry;
+        const resultDigit = productTotal % 10;
+        const nextCarry = Math.floor(productTotal / 10);
+
+        let msg = "";
+        if (carry > 0) msg = `Multiplica ${bUnit} x ${tDigits[i]} = ${productBase} + ${carry} de llevadas = ${productTotal}.`;
+        else msg = `Multiplica ${bUnit} x ${tDigits[i]} = ${productBase}.`;
+
+        if (nextCarry > 0) msg += ` Escribe ${resultDigit} y llevas ${nextCarry}.`;
+        else msg += ` Escribe ${resultDigit}.`;
 
         steps.value.push({
             phase: 'prod1', type: 'result', row: 3, col: i, val: resultDigit, mIdx: i, bIdx: 0,
-            hint: `Multiplica: ${bUnit} x ${tDigits[i]} ${carry ? '+ ' + carry : ''}`
+            hint: msg
         });
 
         if (nextCarry > 0 && i < tDigits.length - 1) {
@@ -81,7 +98,7 @@ const calculateSteps = () => {
     if (carry > 0) {
         steps.value.push({
             phase: 'prod1', type: 'result', row: 3, col: tDigits.length, val: carry, mIdx: tDigits.length - 1, bIdx: 0,
-            hint: `Llevada final: ${carry}`
+            hint: `Como terminaste arriba, baja el ${carry}.`
         });
     }
 
@@ -90,13 +107,21 @@ const calculateSteps = () => {
     const bTen = bDigits[1];
     
     for (let i = 0; i < tDigits.length; i++) {
-        const product = (tDigits[i] * bTen) + carry;
-        const resultDigit = product % 10;
-        const nextCarry = Math.floor(product / 10);
+        const productBase = tDigits[i] * bTen;
+        const productTotal = productBase + carry;
+        const resultDigit = productTotal % 10;
+        const nextCarry = Math.floor(productTotal / 10);
+
+        let msg = "";
+        if (carry > 0) msg = `Multiplica ${bTen} x ${tDigits[i]} = ${productBase} + ${carry} de llevadas = ${productTotal}.`;
+        else msg = `Multiplica ${bTen} x ${tDigits[i]} = ${productBase}.`;
+
+        if (nextCarry > 0) msg += ` Escribe ${resultDigit} y llevas ${nextCarry}.`;
+        else msg += ` Escribe ${resultDigit}.`;
 
         steps.value.push({
             phase: 'prod2', type: 'result', row: 4, col: i + 1, val: resultDigit, mIdx: i, bIdx: 1,
-            hint: `Multiplica decena: ${bTen} x ${tDigits[i]} ${carry ? '+ ' + carry : ''}`
+            hint: msg
         });
 
         if (nextCarry > 0 && i < tDigits.length - 1) {
@@ -111,7 +136,7 @@ const calculateSteps = () => {
     if (carry > 0) {
         steps.value.push({
             phase: 'prod2', type: 'result', row: 4, col: tDigits.length + 1, val: carry, mIdx: tDigits.length - 1, bIdx: 1,
-            hint: `Llevada final: ${carry}`
+            hint: `Escribe la llevada final: ${carry}.`
         });
     }
 
@@ -128,19 +153,27 @@ const calculateSteps = () => {
         
         if (i >= p1Digits.length && i >= p2Digits.length + 1 && carry === 0) break;
 
-        const sumVal = d1 + d2 + carry;
+        const baseSum = d1 + d2;
+        const sumVal = baseSum + carry;
         const resDigit = sumVal % 10;
         const nextCarry = Math.floor(sumVal / 10);
 
+        let msg = "";
+        if (carry > 0) msg = `Suma ${d1} + ${d2} = ${baseSum} + ${carry} de llevadas = ${sumVal}.`;
+        else msg = `Suma ${d1} + ${d2} = ${baseSum}.`;
+
+        if (nextCarry > 0) msg += ` Anota ${resDigit} y escribe ${nextCarry} en las llevadas del vecino.`;
+        else msg += ` Escríbelo.`;
+
         steps.value.push({
             phase: 'sum', type: 'result', row: 5, col: i, val: resDigit, mIdx: -1, bIdx: -1,
-            hint: `Suma la columna ${i}`
+            hint: msg
         });
 
         if (nextCarry > 0) {
              steps.value.push({
                 phase: 'sum', type: 'carry', row: 0, col: i + 1, val: nextCarry, mIdx: -1, bIdx: -1,
-                hint: `Llevada de suma: ${nextCarry}`
+                hint: `Escribe el ${nextCarry} que te dio tu vecino.`
             });
         }
         carry = nextCarry;
@@ -162,6 +195,9 @@ const currentStep = computed(() => {
 });
 
 const handleKeypadPress = (num) => {
+    // NUEVO: Si estamos en transición, ignoramos el teclado
+    if (isTransitioning.value) return;
+
     if (!currentStep.value || isFinished.value) return;
 
     const step = currentStep.value;
@@ -183,12 +219,33 @@ const handleKeypadPress = (num) => {
         currentStepIdx.value++;
         
         if (currentStepIdx.value >= steps.value.length) {
+            // EJERCICIO COMPLETADO
             isFinished.value = true;
+            // NUEVO: Activamos el bloqueo para evitar saltos
+            isTransitioning.value = true;
+            
+            // LÓGICA DE PREMIO Y VOZ INICIAL
+            const rewardAmount = 5;
+            gamificationStore.addCoins('gold', rewardAmount);
+
+            const frases = ["¡Excelente!", "¡Muy bien!", "¡Lo lograste!", "¡Eres genial!"];
+            const frase = frases[Math.floor(Math.random() * frases.length)];
+            // El búho habla inmediatamente
+            speak(`${frase} Ganaste ${rewardAmount} monedas de oro.`);
+
             if (activeExerciseIndex.value === 4) {
-                showConfetti.value = true;
+                // ÚLTIMO EJERCICIO: Pausa dramática de 5 segundos
+                setTimeout(() => {
+                    showCoinRain.value = true; 
+                    speak("¡Increíble! Has completado todo.");
+                    // El bloqueo se mantiene activo porque es el final
+                }, 5000);
             } else {
+                // EJERCICIOS INTERMEDIOS: Pausa corta y avance
                 setTimeout(() => {
                     activeExerciseIndex.value++;
+                    // NUEVO: Liberamos el bloqueo antes de generar el siguiente
+                    isTransitioning.value = false;
                     generateNumbers(); 
                 }, 1500);
             }
@@ -200,6 +257,9 @@ const handleKeypadPress = (num) => {
 };
 
 const handleDelete = () => {
+    // NUEVO: Bloqueo durante transición
+    if (isTransitioning.value) return;
+
     if (!currentStep.value) return;
     const key = `${currentStep.value.row}-${currentStep.value.col}`;
     if (userInputs.value[key]?.status === 'error') {
@@ -219,7 +279,6 @@ const shouldShowTopCheck = (colIdx) => {
     return colIdx <= currentStep.value.mIdx;
 };
 
-// Nueva función para saber si es el check ACTIVO (para que pulse)
 const isTopCheckActive = (colIdx) => {
     if (!currentStep.value) return false;
     return colIdx === currentStep.value.mIdx;
@@ -229,6 +288,11 @@ const shouldShowBotCheck = (colIdx) => {
     if (!currentStep.value) return false;
     const phase = currentStep.value.phase;
     if (phase !== 'prod1' && phase !== 'prod2') return false;
+    return colIdx <= currentStep.value.bIdx;
+};
+
+const isBotCheckActive = (colIdx) => {
+    if (!currentStep.value) return false;
     return colIdx === currentStep.value.bIdx;
 };
 
@@ -310,36 +374,50 @@ onMounted(() => {
 <template>
   <div class="h-[100dvh] w-full bg-slate-100 flex justify-center overflow-hidden font-sans select-none">
     
-    <SimpleConfetti :isActive="showConfetti" />
+    <div v-if="showCoinRain">
+        <CoinRain type="gold" :count="50" />
+    </div>
     
     <div class="w-full max-w-xl h-full flex flex-col bg-white shadow-2xl relative">
 
         <div v-if="showSolution" class="absolute inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" @click.self="showSolution = false">
-            <div class="bg-white rounded-2xl shadow-2xl w-[90%] max-w-xs border-4 border-indigo-100 overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-white rounded-2xl shadow-2xl w-[90%] max-w-sm border-4 border-indigo-100 overflow-hidden flex flex-col max-h-[85vh]">
+                
                 <div class="bg-indigo-50 p-3 border-b border-indigo-100 flex justify-between items-center text-slate-700 font-black shrink-0">
-                    <div class="flex items-center gap-2"><HelpCircle :size="20" class="text-indigo-500"/> Tablas</div>
-                    <button @click="showSolution = false" class="p-1 bg-white rounded-full text-slate-400 hover:text-red-500 transition shadow-sm"><CloseIcon :size="20" /></button>
+                    <div class="flex items-center gap-2">
+                        <BookOpen :size="20" class="text-indigo-500"/> Tablas de Multiplicar
+                    </div>
+                    <button @click="showSolution = false" class="p-1 bg-white rounded-full text-slate-400 hover:text-red-500 transition shadow-sm">
+                        <CloseIcon :size="20" />
+                    </button>
                 </div>
-                <div class="p-2 bg-white border-b border-slate-100 shrink-0">
-                    <div class="relative">
-                        <select v-model="selectedTableMode" class="w-full p-2.5 pl-4 pr-10 bg-slate-50 border-2 border-indigo-100 text-slate-700 font-bold rounded-xl appearance-none focus:outline-none focus:border-indigo-400 transition-colors cursor-pointer">
-                            <option value="current">📝 Ejercicio Actual</option>
-                            <option disabled>──────────</option>
-                            <option v-for="n in 10" :key="n" :value="n">✖️ Tabla del {{ n }}</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none text-indigo-400"><ChevronDown :size="20" stroke-width="3" /></div>
+
+                <div class="p-3 bg-white border-b border-slate-100 shrink-0">
+                    <p class="text-xs font-bold text-slate-400 uppercase text-center mb-2">Selecciona un número</p>
+                    <div class="grid grid-cols-5 gap-2">
+                        <button v-for="n in 10" :key="n" 
+                            @click="selectedHelpTable = n"
+                            :class="[
+                                'py-2 rounded-lg font-black text-sm transition-all',
+                                selectedHelpTable === n 
+                                    ? 'bg-purple-600 text-white shadow-md scale-105' 
+                                    : 'bg-slate-100 text-slate-500 hover:bg-purple-100'
+                            ]">
+                            {{ n }}
+                        </button>
                     </div>
                 </div>
-                <div class="overflow-y-auto p-3 bg-white scrollbar-thin">
-                   <div class="grid grid-cols-1 gap-2">
-                       <div v-for="item in displayedSolutions" :key="item.id" class="flex justify-between items-center p-2 rounded-xl border shadow-sm transition-all" :class="item.isCurrent ? 'bg-slate-50 border-slate-100' : 'bg-indigo-50/50 border-indigo-100'">
-                           <span class="text-lg font-bold text-slate-600 font-mono">{{ item.n1 }} <span class="text-indigo-400 mx-1">{{ item.op }}</span> {{ item.n2 }}</span>
-                           <span class="text-xl font-black text-indigo-600">= {{ item.result }}</span>
+
+                <div class="overflow-y-auto p-4 bg-slate-50 scrollbar-thin flex-1">
+                   <div class="flex flex-col gap-2">
+                       <div v-for="(item, idx) in helpTableData" :key="idx" 
+                            class="flex justify-between items-center p-3 rounded-xl bg-white border border-slate-200 shadow-sm">
+                           <span class="text-lg font-bold text-slate-600 font-mono">
+                               {{ item.n1 }} <span class="text-indigo-400 mx-1">{{ item.op }}</span> {{ item.n2 }}
+                           </span>
+                           <span class="text-xl font-black text-indigo-600">= {{ item.res }}</span>
                        </div>
                    </div>
-                </div>
-                <div class="p-3 bg-slate-50 border-t border-slate-100 text-center shrink-0">
-                    <button @click="showSolution = false" class="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-md active:scale-95 transition">¡Entendido!</button>
                 </div>
             </div>
         </div>
@@ -358,7 +436,9 @@ onMounted(() => {
                 </div>
                 <div class="flex gap-2">
                    <button @click="resetExercise" class="p-2 md:p-2.5 bg-white shadow-sm rounded-lg text-slate-500 active:scale-95 transition hover:text-indigo-600"><Eraser class="w-4 h-4 md:w-5 md:h-5" /></button>
-                   <button @click="showSolution = !showSolution" :class="`p-2 md:p-2.5 rounded-lg shadow-sm transition active:scale-95 ${showSolution ? 'bg-indigo-100 text-indigo-600 ring-2 ring-indigo-300' : 'bg-white text-slate-500 hover:text-indigo-600'}`"><component :is="showSolution ? EyeOff : Eye" class="w-4 h-4 md:w-5 md:h-5" /></button>
+                   <button @click="showSolution = true" :class="`p-2 md:p-2.5 rounded-lg shadow-sm transition active:scale-95 ${showSolution ? 'bg-indigo-100 text-indigo-600 ring-2 ring-indigo-300' : 'bg-white text-slate-500 hover:text-indigo-600'}`">
+                       <BookOpen class="w-4 h-4 md:w-5 md:h-5" />
+                   </button>
                 </div>
             </div>
             <SmartGuide :currentAdvice="owlAdvice" />
@@ -374,8 +454,8 @@ onMounted(() => {
                     {{ activeExerciseIndex + 1 }}
                 </div>
 
-                <div v-if="isFinished" class="absolute inset-0 flex items-center justify-center z-40 pointer-events-none animate-fade-in-scale">
-                    <Check class="w-48 h-48 md:w-64 md:h-64 text-green-500/40" stroke-width="4" />
+                <div v-if="isFinished" class="absolute inset-0 flex items-center justify-center z-50 pointer-events-none animate-fade-in">
+                    <Check class="w-64 h-64 text-green-500/50 drop-shadow-sm" stroke-width="5" />
                 </div>
 
                 <div class="absolute top-0 bottom-0 left-4 md:left-8 w-0.5 bg-red-300 opacity-40"></div>
@@ -389,10 +469,16 @@ onMounted(() => {
                                     {{ getDigit(0, 7-cIndex) }}
                                 </div>
 
-                                <div class="h-4 md:h-6 flex items-end justify-center w-full">
-                                    <Check v-if="shouldShowTopCheck(7-cIndex)" 
-                                           :class="['w-3 h-3 md:w-5 md:h-5 text-green-600', isTopCheckActive(7-cIndex) ? 'animate-heartbeat' : 'animate-fade-in-scale']" 
-                                           stroke-width="4" />
+                                <div class="h-4 md:h-6 flex items-end justify-center w-full relative z-20">
+                                    <div v-if="shouldShowTopCheck(7-cIndex)" 
+                                         :class="[
+                                             'flex items-center justify-center transition-all duration-300',
+                                             isTopCheckActive(7-cIndex) 
+                                                 ? 'bg-white rounded-full w-6 h-6 md:w-8 md:h-8 shadow-sm border border-green-200 animate-heartbeat' 
+                                                 : 'w-4 h-4 md:w-6 md:h-6'
+                                          ]">
+                                        <Check :class="isTopCheckActive(7-cIndex) ? 'w-4 h-4 md:w-5 md:h-5 text-green-600' : 'w-4 h-4 md:w-6 md:h-6 text-green-600/70'" stroke-width="4" />
+                                    </div>
                                 </div>
 
                                 <div class="flex items-center justify-center w-9 h-10 md:w-14 md:h-14 text-2xl md:text-5xl font-mono font-bold text-slate-800">
@@ -403,8 +489,15 @@ onMounted(() => {
                                     <span v-if="7-cIndex === 6" class="text-purple-600 font-black">×</span>
                                     <template v-else>
                                         {{ getDigit(2, 7-cIndex) }}
-                                        <div v-if="shouldShowBotCheck(7-cIndex)" class="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-white rounded-full p-0.5 shadow-sm z-30 animate-heartbeat">
-                                            <Check class="w-3 h-3 md:w-4 md:h-4 text-green-600" stroke-width="4" />
+                                        
+                                        <div v-if="shouldShowBotCheck(7-cIndex)" 
+                                             :class="[
+                                                 'absolute -top-1 -right-1 md:-top-2 md:-right-2 z-30 transition-all duration-300',
+                                                 isBotCheckActive(7-cIndex) 
+                                                     ? 'bg-white rounded-full p-0.5 shadow-sm border border-green-200 animate-heartbeat' 
+                                                     : ''
+                                              ]">
+                                            <Check :class="isBotCheckActive(7-cIndex) ? 'w-3 h-3 md:w-4 md:h-4 text-green-600' : 'w-3 h-3 md:w-4 md:h-4 text-green-600/70'" stroke-width="4" />
                                         </div>
                                     </template>
                                 </div>
@@ -447,7 +540,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* ANIMACIÓN LATIDO (NUEVA) */
+/* ANIMACIÓN LATIDO */
 @keyframes heartbeat {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.3); filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.6)); }
